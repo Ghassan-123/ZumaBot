@@ -1,11 +1,10 @@
-import pygetwindow as gw
+from WindowCapturer import WindowCapturer
 import numpy as np
 import pyautogui
 import keyboard
 import time
-import mss
+import sys
 import cv2
-from WindowCapturer import WindowCapturer
 
 
 class GamePlayer:
@@ -14,6 +13,7 @@ class GamePlayer:
         self.finish_pos = []
         self.frog_pos = None
         self.WindowCapturer = WindowCapturer()
+        self.frog_template = cv2.imread("frog_template.png")
 
     def GetFinishPos(self, hsv, area_threshold=4800):
         if not self.finish_pos:
@@ -50,37 +50,39 @@ class GamePlayer:
         else:
             return self.finish_pos
 
-    def GetFrogPos(self, hsv, area_threshold=4000):
-        # if self.frog_pos is None:
-        frog_mask = cv2.inRange(hsv, np.array([14, 26, 130]), np.array([19, 78, 240]))
+    def GetFrogPos(self, hsv, area_threshold=1200):
+        if self.frog_pos is None:
+            frog_mask = cv2.inRange(
+                hsv, np.array([15, 15, 200]), np.array([20, 45, 255])
+            )
 
-        frog_mask = cv2.dilate(frog_mask, (5, 5), iterations=10)
-        # cv2.imshow("frog", frog_mask)
+            frog_mask = cv2.dilate(frog_mask, (7, 7), iterations=10)
+            cv2.imshow("frog", frog_mask)
 
-        frog_contours, _ = cv2.findContours(
-            frog_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        )
+            frog_contours, _ = cv2.findContours(
+                frog_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+            )
 
-        if frog_contours:
-            # Get the largest contour by area
-            frog_contour = max(frog_contours, key=cv2.contourArea)
-            area = cv2.contourArea(frog_contour)
+            if frog_contours:
+                # Get the largest contour by area
+                frog_contour = max(frog_contours, key=cv2.contourArea)
+                area = cv2.contourArea(frog_contour)
+                print(area)
 
-            if (area_threshold - 400) < area < (area_threshold + 400):
-                (frog_cx, frog_cy), frog_radius = cv2.minEnclosingCircle(frog_contour)
-                self.frog_pos = ((frog_cx, frog_cy), frog_radius)
+                if (area_threshold - 400) < area < (area_threshold + 400):
+                    (frog_cx, frog_cy), frog_radius = cv2.minEnclosingCircle(
+                        frog_contour
+                    )
+                    self.frog_pos = ((frog_cx, frog_cy), frog_radius + 10)
 
-            if self.frog_pos:
-                return self.frog_pos
-
-    # else:
-    #     return self.frog_pos
+                if self.frog_pos:
+                    return self.frog_pos
+        else:
+            return self.frog_pos
 
     def DetectFrogSift(self, frame):
-        # sift
         # 1. Setup
-        template = cv2.imread("frog_template.png")
-        template_gray = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
+        template_gray = cv2.cvtColor(self.frog_template, cv2.COLOR_BGR2GRAY)
         frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
         # 2. Detect and Compute
@@ -89,15 +91,15 @@ class GamePlayer:
         kp2, des2 = sift.detectAndCompute(frame_gray, None)
 
         # 3. Match using BFMatcher
-        bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True)
-        matches = bf.match(des1, des2)
+        bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=False)
+        matches = bf.knnMatch(des1, des2, k=2)
 
-        # 4. Sort and Filter
-        # Sort matches by distance (lower distance means a better match)
-        matches = sorted(matches, key=lambda x: x.distance)
-
-        # Keep only the best 20 matches, or filter by a distance value
-        good = [m for m in matches if m.distance < 50]
+        # 4. Filter good matches
+        # Lowe’s ratio test
+        good = []
+        for m, n in matches:
+            if m.distance < 0.75 * n.distance:
+                good.append(m)
 
         # 5. Draw Matches
         res = cv2.drawMatches(
@@ -111,49 +113,6 @@ class GamePlayer:
         )
 
         cv2.imshow("Final Detection", res)
-
-    def DetectFrogOrb(self, frame):
-        # 1. Setup
-        template = cv2.imread("frog_template.png")
-        template_gray = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
-        frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
-        # 2. Initialize ORB detector
-        # nfeatures=500 is the default; increase it if the frog is hard to find
-        orb = cv2.ORB_create(nfeatures=1000)
-
-        # 3. Detect and Compute
-        kp1, des1 = orb.detectAndCompute(template_gray, None)
-        kp2, des2 = orb.detectAndCompute(frame_gray, None)
-
-        # Check if descriptors were found to avoid crashing the matcher
-        if des1 is None or des2 is None:
-            return
-
-        # 4. Match using BFMatcher
-        # IMPORTANT: Use NORM_HAMMING for ORB
-        bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
-        matches = bf.match(des1, des2)
-
-        # 5. Sort and Filter
-        matches = sorted(matches, key=lambda x: x.distance)
-
-        # ORB distances are integers (0 to 256).
-        # A distance < 30 is usually a very strong match.
-        good = [m for m in matches if m.distance < 40]
-
-        # 6. Draw
-        res = cv2.drawMatches(
-            template_gray,
-            kp1,
-            frame_gray,
-            kp2,
-            good,
-            None,
-            flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,
-        )
-
-        cv2.imshow("ORB Detection", res)
 
     # need payment and rebuilding open cv
     def DetectFrogSurf(self, frame):
@@ -191,8 +150,86 @@ class GamePlayer:
 
         cv2.imshow("SURF Detection", res)
 
-    def RunLoop(self):
+    def DetectFrogOrb(self, frame):
+        # 1. Setup
+        template_gray = cv2.cvtColor(self.frog_template, cv2.COLOR_BGR2GRAY)
+        frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
+        # 2. Initialize ORB detector
+        orb = cv2.ORB_create()
+
+        # 3. Detect and Compute
+        kp1, des1 = orb.detectAndCompute(template_gray, None)
+        kp2, des2 = orb.detectAndCompute(frame_gray, None)
+
+        # Check if descriptors were found to avoid crashing the matcher
+        if des1 is None or des2 is None:
+            return
+
+        # 4. Match using BFMatcher
+        # IMPORTANT: Use NORM_HAMMING for ORB
+        bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
+        matches = bf.knnMatch(des1, des2, k=2)
+
+        # 5. Filter good matches
+        good = []
+        for m, n in matches:
+            if m.distance < 0.5 * n.distance:
+                good.append(m)
+
+        # 6. Draw
+        res = cv2.drawMatches(
+            template_gray,
+            kp1,
+            frame_gray,
+            kp2,
+            good,
+            None,
+            flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,
+        )
+
+        cv2.imshow("ORB Detection", res)
+
+        # 7. Localize the Frog (Homography)
+        # We need at least 4 matches to find a homography matrix
+        if len(good) > 4:
+            # Extract location of good matches
+            src_pts = np.float32([kp1[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
+            dst_pts = np.float32([kp2[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
+
+            # Find the transformation matrix
+            M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+
+            if M is not None:
+                # Get dimensions of the template
+                h, w = template_gray.shape
+                # Define the corners of the template
+                pts = np.float32(
+                    [[0, 0], [0, h - 1], [w - 1, h - 1], [w - 1, 0]]
+                ).reshape(-1, 1, 2)
+
+                # Project corners into the frame to find the "contour"
+                dst = cv2.perspectiveTransform(pts, M)
+
+                # 8. Calculate Minimum Enclosing Circle
+                # dst contains the 4 corners of the detected object in the frame
+                (x, y), radius = cv2.minEnclosingCircle(dst)
+                center = (int(x), int(y))
+                radius = int(radius)
+
+                # 9. Draw Results
+                # Draw the contour (the bounding box)
+                frame = cv2.polylines(
+                    frame, [np.int32(dst)], True, (0, 255, 0), 3, cv2.LINE_AA
+                )
+                # Draw the circle
+                cv2.circle(frame, center, radius, (255, 0, 255), 2)
+
+                print(f"Frog found at {center} with radius {radius}")
+
+        cv2.imshow("Detection with Circle", frame)
+
+    def RunLoop(self):
         #  Start timer
         prev_time = time.time()
 
@@ -203,6 +240,8 @@ class GamePlayer:
             if event == cv2.EVENT_LBUTTONDOWN:
                 print((y, x))
                 print(hsv[y, x])
+
+        start = False
 
         while True:
             # Get current frame
@@ -226,12 +265,26 @@ class GamePlayer:
 
             hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
-            finishPos = self.GetFinishPos(hsv)
-            frogPos = self.GetFrogPos(hsv)
+            if keyboard.is_pressed("s"):
+                start = True
 
-            if finishPos is not None:
-                for pos in finishPos:
-                    (cx, cy), radius = pos
+            if start:
+                finishPos = self.GetFinishPos(hsv)
+                frogPos = self.GetFrogPos(hsv)
+
+                if finishPos is not None:
+                    for pos in finishPos:
+                        (cx, cy), radius = pos
+                        cv2.circle(
+                            frame,
+                            (int(cx), int(cy)),
+                            int(radius),
+                            (255, 255, 255),
+                            2,
+                        )  # Center dot
+
+                if frogPos is not None:
+                    (cx, cy), radius = frogPos
                     cv2.circle(
                         frame,
                         (int(cx), int(cy)),
@@ -240,40 +293,37 @@ class GamePlayer:
                         2,
                     )  # Center dot
 
-            if frogPos is not None:
-                (cx, cy), radius = frogPos
-                cv2.circle(
-                    frame,
-                    (int(cx), int(cy)),
-                    int(radius),
-                    (255, 255, 255),
-                    2,
-                )  # Center dot
-
-            # cv2.drawContours(frame, frog_contour, -1, (255, 255, 255), 10)
-
             # Show Frame
-            # cv2.imshow("Test", frame)
+            cv2.imshow("Test", frame)
             cv2.imshow("Screen Capture", hsv)
             # self.DetectFrogSift(frame)
-            self.DetectFrogOrb(frame)
+            # self.DetectFrogSurf(frame)
+            # self.DetectFrogOrb(frame)
 
-            if keyboard.is_pressed("c"):
-                win_x = 30
-                win_y = 60
+            if keyboard.is_pressed("r"):
+                self.start_pos = None
+                self.finish_pos = []
+                self.frog_pos = None
 
-                # Convert window-relative to screen coordinates
-                screen_x = window.left + win_x
-                screen_y = window.top + win_y
+            if keyboard.is_pressed("e"):
+                sys.exit(0)
 
-                # Move mouse
-                pyautogui.moveTo(screen_x, screen_y, duration=0.1)
+            # if keyboard.is_pressed("p"):
+            #     win_x = 30
+            #     win_y = 60
 
-                # Click
-                pyautogui.click()
+            #     # Convert window-relative to screen coordinates
+            #     screen_x = window.left + win_x
+            #     screen_y = window.top + win_y
 
-                # Small delay
-                time.sleep(0.1)
+            #     # Move mouse
+            #     pyautogui.moveTo(screen_x, screen_y, duration=0.1)
+
+            #     # Click
+            #     pyautogui.click()
+
+            #     # Small delay
+            #     time.sleep(0.1)
 
             cv2.setMouseCallback("Screen Capture", on_mouse)
 
