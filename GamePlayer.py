@@ -364,7 +364,7 @@ class GamePlayer:
 
         self.masks["red"] = red_mask
 
-        # cv2.imshow("red", red_mask)
+        cv2.imshow("red", red_mask)
 
     def GetGreen(self, hsv):
         lower_green = (50, 115, 110)
