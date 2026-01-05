@@ -15,6 +15,10 @@ class GamePlayer:
         self.WindowCapturer = WindowCapturer()
         self.frog_template = cv2.imread("frog_template.png")
 
+        self.masks = {}
+        self.current_ball = None
+        self.second_color = None
+
     def GetFinishPos(self, hsv, area_threshold=4800):
         if not self.finish_pos:
             finish_mask = cv2.inRange(
@@ -296,6 +300,15 @@ class GamePlayer:
             # Show Frame
             cv2.imshow("Test", frame)
             cv2.imshow("Screen Capture", hsv)
+            self.GetRed(hsv)
+            self.GetGreen(hsv)
+            self.GetBlue(hsv)
+            self.GetYellow(hsv)
+
+            self.GetCurrentPlayBall()
+            print("current_ball: ", self.current_ball)
+            print("second_color: ", self.second_color)
+
             # self.DetectFrogSift(frame)
             # self.DetectFrogSurf(frame)
             # self.DetectFrogOrb(frame)
@@ -332,6 +345,85 @@ class GamePlayer:
                 break
 
         cv2.destroyAllWindows()
+
+    def GetRed(self, hsv):
+        # Red part 1 (low hue)
+        lower_red1 = np.array([0, 110, 210])
+        upper_red1 = np.array([12, 255, 255])
+
+        # Red part 2 (high hue)
+        lower_red2 = np.array([170, 110, 210])
+        upper_red2 = np.array([179, 255, 255])
+
+        # Red (two ranges)
+        mask_red1 = cv2.inRange(hsv, lower_red1, upper_red1)
+        mask_red2 = cv2.inRange(hsv, lower_red2, upper_red2)
+        mask_red = cv2.bitwise_or(mask_red1, mask_red2)
+        kernel = np.ones((3, 3), np.uint8)
+        red_mask = cv2.morphologyEx(mask_red, cv2.MORPH_CLOSE, kernel)
+
+        self.masks["red"] = red_mask
+
+        # cv2.imshow("red", red_mask)
+
+    def GetGreen(self, hsv):
+        lower_green = (50, 115, 110)
+        upper_green = (70, 180, 255)
+        mask_green = cv2.inRange(hsv, lower_green, upper_green)
+        kernel = np.ones((3, 3), np.uint8)
+        # green_mask = cv2.morphologyEx(mask_green, cv2.MORPH_OPEN, kernel)
+        green_mask = cv2.morphologyEx(mask_green, cv2.MORPH_CLOSE, kernel)
+
+        self.masks["green"] = green_mask
+
+        cv2.imshow("green", green_mask)
+
+    def GetBlue(self, hsv):
+        lower_blue = (90, 130, 160)
+        upper_blue = (124, 210, 255)
+        mask_blue = cv2.inRange(hsv, lower_blue, upper_blue)
+        kernel = np.ones((3, 3), np.uint8)
+        # blue_mask = cv2.morphologyEx(mask_blue, cv2.MORPH_CLOSE, kernel)
+
+        self.masks["blue"] = mask_blue
+
+        cv2.imshow("blue", mask_blue)
+
+    def GetYellow(self, hsv):
+        lower_yellow = (20, 160, 200)
+        upper_yellow = (30, 230, 255)
+        mask_yellow = cv2.inRange(hsv, lower_yellow, upper_yellow)
+        kernel = np.ones((3, 3), np.uint8)
+        yellow_mask = cv2.morphologyEx(mask_yellow, cv2.MORPH_CLOSE, kernel)
+
+        self.masks["yellow"] = yellow_mask
+
+        cv2.imshow("yellow", yellow_mask)
+
+    def GetCurrentPlayBall(self):
+        if self.masks and self.frog_pos:
+            for key, mask in self.masks.items():
+                (cx, cy), radius = self.frog_pos
+
+                roi_mask = mask[
+                    int(cy - radius) : int(cy + radius),
+                    int(cx - radius) : int(cx + radius),
+                ]
+
+                contours, _ = cv2.findContours(
+                    roi_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+                )
+
+                if contours:
+                    for contour in contours:
+                        area = cv2.contourArea(contour)
+
+                        if area > 200:
+                            self.current_ball = key
+                        elif 5 < area < 50:
+                            self.second_color = key
+                        else:
+                            pass
 
 
 gameplayer = GamePlayer()
