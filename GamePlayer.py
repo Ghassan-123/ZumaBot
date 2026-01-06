@@ -1,7 +1,7 @@
 from WindowCapturer import WindowCapturer
 from collections import defaultdict
 from Ball import Ball
-import tkinter as tk
+
 import numpy as np
 import pyautogui
 import keyboard
@@ -9,9 +9,13 @@ import time
 import sys
 import cv2
 
+import threading
+
 
 class GamePlayer:
-    def __init__(self):
+    def __init__(self, aspect_ratio):
+        self.aspect_ratio = aspect_ratio
+
         self.start_pos = None
         self.finish_pos = []
         self.frog_pos = None
@@ -95,154 +99,117 @@ class GamePlayer:
         else:
             return self.frog_pos
 
-    def DetectFrogSift(self, frame):
-        # 1. Setup
-        template_gray = cv2.cvtColor(self.frog_template, cv2.COLOR_BGR2GRAY)
-        frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    def GetRed(self, hsv):
+        # Red part 1 (low hue)
+        lower_red1 = np.array([0, 110, 210])
+        upper_red1 = np.array([12, 255, 255])
 
-        # 2. Detect and Compute
-        sift = cv2.SIFT_create()
-        kp1, des1 = sift.detectAndCompute(template_gray, None)
-        kp2, des2 = sift.detectAndCompute(frame_gray, None)
+        # Red part 2 (high hue)
+        lower_red2 = np.array([170, 110, 210])
+        upper_red2 = np.array([179, 255, 255])
 
-        # 3. Match using BFMatcher
-        bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=False)
-        matches = bf.knnMatch(des1, des2, k=2)
+        # Red (two ranges)
+        mask_red1 = cv2.inRange(hsv, lower_red1, upper_red1)
+        mask_red2 = cv2.inRange(hsv, lower_red2, upper_red2)
+        mask_red = cv2.bitwise_or(mask_red1, mask_red2)
+        kernel = np.ones((3, 3), np.uint8)
+        red_mask = cv2.morphologyEx(mask_red, cv2.MORPH_CLOSE, kernel)
 
-        # 4. Filter good matches
-        # Lowe’s ratio test
-        good = []
-        for m, n in matches:
-            if m.distance < 0.75 * n.distance:
-                good.append(m)
+        self.masks_row["red"] = red_mask
 
-        # 5. Draw Matches
-        res = cv2.drawMatches(
-            template_gray,
-            kp1,
-            frame_gray,
-            kp2,
-            good,
-            None,
-            flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,
+        temp = np.zeros_like(red_mask)
+        contours, _ = cv2.findContours(
+            red_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
         )
+        if contours:
+            for contour in contours:
+                (cx, cy), _ = cv2.minEnclosingCircle(contour)
+                area = cv2.contourArea(contour)
+                if 50 < area < 450:
+                    cv2.circle(temp, (int(cx), int(cy)), 10, (255, 255, 255), -1)
+        self.masks_cleaned["red"] = temp
+        # cv2.imshow("red", temp)
 
-        cv2.imshow("Final Detection", res)
+    def GetGreen(self, hsv):
+        lower_green = (50, 160, 165)
+        upper_green = (70, 230, 255)
+        mask_green = cv2.inRange(hsv, lower_green, upper_green)
+        kernel = np.ones((3, 3), np.uint8)
+        green_mask = cv2.morphologyEx(mask_green, cv2.MORPH_CLOSE, kernel)
 
-    # need payment and rebuilding open cv
-    def DetectFrogSurf(self, frame):
-        # 1. Setup
-        template = cv2.imread("frog_template.png")
-        template_gray = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
-        frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        self.masks_row["green"] = green_mask
 
-        # 2. Detect and Compute using SURF
-        # 400 is the Hessian Threshold (higher = fewer, but stronger features)
-        surf = cv2.xfeatures2d.SURF_create(400)
-
-        kp1, des1 = surf.detectAndCompute(template_gray, None)
-        kp2, des2 = surf.detectAndCompute(frame_gray, None)
-
-        # 3. Match using BFMatcher
-        # SURF descriptors are floating point, so use NORM_L2
-        bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True)
-        matches = bf.match(des1, des2)
-
-        # 4. Sort and Filter
-        matches = sorted(matches, key=lambda x: x.distance)
-        good = [m for m in matches if m.distance < 0.1]  # SURF distances vary from SIFT
-
-        # 5. Draw
-        res = cv2.drawMatches(
-            template_gray,
-            kp1,
-            frame_gray,
-            kp2,
-            good,
-            None,
-            flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,
+        temp = np.zeros_like(green_mask)
+        contours, _ = cv2.findContours(
+            green_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
         )
+        if contours:
+            for contour in contours:
+                (cx, cy), _ = cv2.minEnclosingCircle(contour)
+                area = cv2.contourArea(contour)
+                if 100 < area < 500:
+                    cv2.circle(temp, (int(cx), int(cy)), 10, (255, 255, 255), -1)
+        self.masks_cleaned["green"] = temp
+        # cv2.imshow("green", temp)
 
-        cv2.imshow("SURF Detection", res)
+    def GetBlue(self, hsv):
+        lower_blue = (90, 123, 155)
+        upper_blue = (124, 231, 255)
+        mask_blue = cv2.inRange(hsv, lower_blue, upper_blue)
+        blue_mask = cv2.erode(mask_blue, (3, 3), iterations=3)
+        kernel = np.ones((3, 3), np.uint8)
+        blue_mask = cv2.morphologyEx(blue_mask, cv2.MORPH_CLOSE, kernel)
+        blue_mask = cv2.morphologyEx(blue_mask, cv2.MORPH_OPEN, kernel)
 
-    def DetectFrogOrb(self, frame):
-        # 1. Setup
-        template_gray = cv2.cvtColor(self.frog_template, cv2.COLOR_BGR2GRAY)
-        frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        self.masks_row["blue"] = mask_blue
 
-        # 2. Initialize ORB detector
-        orb = cv2.ORB_create()
-
-        # 3. Detect and Compute
-        kp1, des1 = orb.detectAndCompute(template_gray, None)
-        kp2, des2 = orb.detectAndCompute(frame_gray, None)
-
-        # Check if descriptors were found to avoid crashing the matcher
-        if des1 is None or des2 is None:
-            return
-
-        # 4. Match using BFMatcher
-        # IMPORTANT: Use NORM_HAMMING for ORB
-        bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
-        matches = bf.knnMatch(des1, des2, k=2)
-
-        # 5. Filter good matches
-        good = []
-        for m, n in matches:
-            if m.distance < 0.5 * n.distance:
-                good.append(m)
-
-        # 6. Draw
-        res = cv2.drawMatches(
-            template_gray,
-            kp1,
-            frame_gray,
-            kp2,
-            good,
-            None,
-            flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,
+        temp = np.zeros_like(blue_mask)
+        contours, _ = cv2.findContours(
+            blue_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
         )
+        if contours:
+            for contour in contours:
+                (cx, cy), radius = cv2.minEnclosingCircle(contour)
+                area = cv2.contourArea(contour)
+                if 40 < area < 600:
+                    cv2.circle(temp, (int(cx), int(cy)), 10, (255, 255, 255), -1)
+        self.masks_cleaned["blue"] = temp
+        # cv2.imshow("blue", temp)
 
-        cv2.imshow("ORB Detection", res)
+    def GetYellow(self, hsv):
+        lower_yellow = (20, 160, 200)
+        upper_yellow = (30, 230, 255)
+        mask_yellow = cv2.inRange(hsv, lower_yellow, upper_yellow)
+        kernel = np.ones((3, 3), np.uint8)
+        yellow_mask = cv2.morphologyEx(mask_yellow, cv2.MORPH_CLOSE, kernel)
 
-        # 7. Localize the Frog (Homography)
-        # We need at least 4 matches to find a homography matrix
-        if len(good) > 4:
-            # Extract location of good matches
-            src_pts = np.float32([kp1[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
-            dst_pts = np.float32([kp2[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
+        self.masks_row["yellow"] = yellow_mask
 
-            # Find the transformation matrix
-            M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+        temp = np.zeros_like(yellow_mask)
+        contours, _ = cv2.findContours(
+            yellow_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
+        if contours:
+            for contour in contours:
+                (cx, cy), _ = cv2.minEnclosingCircle(contour)
+                area = cv2.contourArea(contour)
+                if 50 < area < 500:
+                    cv2.circle(temp, (int(cx), int(cy)), 10, (255, 255, 255), -1)
+        self.masks_cleaned["yellow"] = temp
+        # cv2.imshow("yellow", temp)
 
-            if M is not None:
-                # Get dimensions of the template
-                h, w = template_gray.shape
-                # Define the corners of the template
-                pts = np.float32(
-                    [[0, 0], [0, h - 1], [w - 1, h - 1], [w - 1, 0]]
-                ).reshape(-1, 1, 2)
+    def process_colors(self, hsv):
+        threads = [
+            threading.Thread(target=self.GetRed, args=(hsv,)),
+            threading.Thread(target=self.GetGreen, args=(hsv,)),
+            threading.Thread(target=self.GetBlue, args=(hsv,)),
+            threading.Thread(target=self.GetYellow, args=(hsv,)),
+        ]
 
-                # Project corners into the frame to find the "contour"
-                dst = cv2.perspectiveTransform(pts, M)
-
-                # 8. Calculate Minimum Enclosing Circle
-                # dst contains the 4 corners of the detected object in the frame
-                (x, y), radius = cv2.minEnclosingCircle(dst)
-                center = (int(x), int(y))
-                radius = int(radius)
-
-                # 9. Draw Results
-                # Draw the contour (the bounding box)
-                frame = cv2.polylines(
-                    frame, [np.int32(dst)], True, (0, 255, 0), 3, cv2.LINE_AA
-                )
-                # Draw the circle
-                cv2.circle(frame, center, radius, (255, 0, 255), 2)
-
-                # print(f"Frog found at {center} with radius {radius}")
-
-        cv2.imshow("Detection with Circle", frame)
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
 
     def RunLoop(self):
         #  Start timer
@@ -279,6 +246,10 @@ class GamePlayer:
             )
 
             hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+            if self.aspect_ratio == 1.6:
+                hsv[:64, :] = (0, 0, 0)
+            else:
+                hsv[:50, :] = (0, 0, 0)
 
             if not start and keyboard.is_pressed("s"):
                 start = True
@@ -307,17 +278,13 @@ class GamePlayer:
                         (255, 255, 255),
                         2,
                     )  # Center dot
-                self.GetRed(hsv)
-                self.GetGreen(hsv)
-                self.GetBlue(hsv)
-                self.GetYellow(hsv)
+                self.process_colors(hsv)
+
                 self.GetAllBalls()
                 self.GetCurrentPlayBall()
-                # print("current_ball: ", self.current_ball)
-                # print("second_color: ", self.second_color)
+
                 detections = self.DetectBalls()
                 self.UpdateBallTracks(detections)
-
                 chains = self.GetSortedBallsPerChain()
 
                 for chain_id, chain in enumerate(chains):
@@ -374,133 +341,8 @@ class GamePlayer:
 
         cv2.destroyAllWindows()
 
-    def GetRed(self, hsv):
-        # Red part 1 (low hue)
-        lower_red1 = np.array([0, 110, 210])
-        upper_red1 = np.array([12, 255, 255])
-
-        # Red part 2 (high hue)
-        lower_red2 = np.array([170, 110, 210])
-        upper_red2 = np.array([179, 255, 255])
-
-        # Red (two ranges)
-        mask_red1 = cv2.inRange(hsv, lower_red1, upper_red1)
-        mask_red2 = cv2.inRange(hsv, lower_red2, upper_red2)
-        mask_red = cv2.bitwise_or(mask_red1, mask_red2)
-        kernel = np.ones((3, 3), np.uint8)
-        red_mask = cv2.morphologyEx(mask_red, cv2.MORPH_CLOSE, kernel)
-
-        self.masks_row["red"] = red_mask
-
-        if ASPECT_RATIO == 1.6:
-            red_mask[:60, :] = 0
-        else:
-            red_mask[:50, :] = 0
-
-        temp = np.zeros_like(red_mask)
-        contours, _ = cv2.findContours(
-            red_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        )
-        if contours:
-            for contour in contours:
-                (cx, cy), _ = cv2.minEnclosingCircle(contour)
-                area = cv2.contourArea(contour)
-                if 50 < area < 450:
-                    cv2.circle(temp, (int(cx), int(cy)), 10, (255, 255, 255), -1)
-        self.masks_cleaned["red"] = temp
-
-        cv2.imshow("red", temp)
-
-    def GetGreen(self, hsv):
-        lower_green = (50, 160, 165)
-        upper_green = (70, 230, 255)
-        mask_green = cv2.inRange(hsv, lower_green, upper_green)
-        kernel = np.ones((3, 3), np.uint8)
-        # green_mask = cv2.morphologyEx(mask_green, cv2.MORPH_OPEN, kernel)
-        green_mask = cv2.morphologyEx(mask_green, cv2.MORPH_CLOSE, kernel)
-
-        self.masks_row["green"] = green_mask
-
-        if ASPECT_RATIO == 1.6:
-            green_mask[:60, :] = 0
-        else:
-            green_mask[:50, :] = 0
-
-        temp = np.zeros_like(green_mask)
-        contours, _ = cv2.findContours(
-            green_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        )
-        if contours:
-            for contour in contours:
-                (cx, cy), _ = cv2.minEnclosingCircle(contour)
-                area = cv2.contourArea(contour)
-                if 100 < area < 500:
-                    cv2.circle(temp, (int(cx), int(cy)), 10, (255, 255, 255), -1)
-        self.masks_cleaned["green"] = temp
-
-        cv2.imshow("green", temp)
-
-    def GetBlue(self, hsv):
-        lower_blue = (90, 123, 155)
-        upper_blue = (124, 231, 255)
-        mask_blue = cv2.inRange(hsv, lower_blue, upper_blue)
-        blue_mask = cv2.erode(mask_blue, (3, 3), iterations=3)
-        kernel = np.ones((3, 3), np.uint8)
-        blue_mask = cv2.morphologyEx(blue_mask, cv2.MORPH_CLOSE, kernel)
-        blue_mask = cv2.morphologyEx(blue_mask, cv2.MORPH_OPEN, kernel)
-
-        self.masks_row["blue"] = mask_blue
-
-        if ASPECT_RATIO == 1.6:
-            blue_mask[:60, :] = 0
-        else:
-            blue_mask[:50, :] = 0
-
-        temp = np.zeros_like(blue_mask)
-        contours, _ = cv2.findContours(
-            blue_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        )
-        if contours:
-            for contour in contours:
-                (cx, cy), radius = cv2.minEnclosingCircle(contour)
-                area = cv2.contourArea(contour)
-                if 40 < area < 600:
-                    cv2.circle(temp, (int(cx), int(cy)), 10, (255, 255, 255), -1)
-        self.masks_cleaned["blue"] = temp
-
-        cv2.imshow("blue", temp)
-
-    def GetYellow(self, hsv):
-        lower_yellow = (20, 160, 200)
-        upper_yellow = (30, 230, 255)
-        mask_yellow = cv2.inRange(hsv, lower_yellow, upper_yellow)
-        kernel = np.ones((3, 3), np.uint8)
-        yellow_mask = cv2.morphologyEx(mask_yellow, cv2.MORPH_CLOSE, kernel)
-
-        self.masks_row["yellow"] = yellow_mask
-
-        if ASPECT_RATIO == 1.6:
-            yellow_mask[:60, :] = 0
-        else:
-            yellow_mask[:50, :] = 0
-
-        temp = np.zeros_like(yellow_mask)
-        contours, _ = cv2.findContours(
-            yellow_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        )
-        if contours:
-            for contour in contours:
-                (cx, cy), _ = cv2.minEnclosingCircle(contour)
-                area = cv2.contourArea(contour)
-                if 50 < area < 500:
-                    cv2.circle(temp, (int(cx), int(cy)), 10, (255, 255, 255), -1)
-        self.masks_cleaned["yellow"] = temp
-
-        cv2.imshow("yellow", temp)
-
     def GetAllBalls(self):
         if self.masks_cleaned:
-
             first_half = cv2.bitwise_or(
                 self.masks_cleaned["red"], self.masks_cleaned["green"]
             )
@@ -531,6 +373,24 @@ class GamePlayer:
             self.all_balls_mask = all_balls
             cv2.imshow("balls", all_balls)
 
+    def DetectBalls(self):
+        if self.all_balls_mask is None:
+            return []
+
+        detections = []
+
+        num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
+            self.all_balls_mask, connectivity=8
+        )
+
+        for i in range(1, num_labels):  # skip background
+            area = stats[i, cv2.CC_STAT_AREA]
+            if 50 < area < 500:
+                cx, cy = centroids[i]
+                detections.append(np.array([cx, cy]))
+
+        return detections
+
     def GetCurrentPlayBall(self):
         if self.masks_row and self.frog_pos:
             for key, mask in self.masks_row.items():
@@ -555,24 +415,6 @@ class GamePlayer:
                             self.second_color = key
                         else:
                             pass
-
-    def DetectBalls(self):
-        if self.all_balls_mask is None:
-            return []
-
-        detections = []
-
-        num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
-            self.all_balls_mask, connectivity=8
-        )
-
-        for i in range(1, num_labels):  # skip background
-            area = stats[i, cv2.CC_STAT_AREA]
-            if 50 < area < 500:
-                cx, cy = centroids[i]
-                detections.append(np.array([cx, cy]))
-
-        return detections
 
     def UpdateBallTracks(self, detections):
         assigned = set()
@@ -715,54 +557,152 @@ class GamePlayer:
 
         return result
 
-    # def SortBalls(self, mask):
-    #     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
-    #         mask, connectivity=8
-    #     )
-    #     centers = {}
-    #     for i in range(1, num_labels):
-    #         centers[i] = np.array(centroids[i])
-    #     adj = defaultdict(list)
-    #     THRESH = 1.5 * BALL_DIAMETER  # tune this
 
-    #     for i in centers:
-    #         for j in centers:
-    #             if i != j:
-    #                 if euclidean(centers[i], centers[j]) < THRESH:
-    #                     adj[i].append(j)
-    #     start = None
-    #     for k, v in adj.items():
-    #         if len(v) == 1:
-    #             start = k
-    #             break
-    #     ordered = []
-    #     visited = set()
+# def DetectFrogSift(self, frame):
+#     # 1. Setup
+#     template_gray = cv2.cvtColor(self.frog_template, cv2.COLOR_BGR2GRAY)
+#     frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-    #     current = start
-    #     prev = None
+#     # 2. Detect and Compute
+#     sift = cv2.SIFT_create()
+#     kp1, des1 = sift.detectAndCompute(template_gray, None)
+#     kp2, des2 = sift.detectAndCompute(frame_gray, None)
 
-    #     while current is not None:
-    #         ordered.append(current)
-    #         visited.add(current)
+#     # 3. Match using BFMatcher
+#     bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=False)
+#     matches = bf.knnMatch(des1, des2, k=2)
 
-    #         next_nodes = [n for n in adj[current] if n != prev]
-    #         if not next_nodes:
-    #             break
+#     # 4. Filter good matches
+#     # Lowe’s ratio test
+#     good = []
+#     for m, n in matches:
+#         if m.distance < 0.75 * n.distance:
+#             good.append(m)
 
-    #         prev = current
-    #         current = next_nodes[0]
-    #     sorted_centers = [centers[i] for i in ordered]
-    #     print(sorted_centers)
+#     # 5. Draw Matches
+#     res = cv2.drawMatches(
+#         template_gray,
+#         kp1,
+#         frame_gray,
+#         kp2,
+#         good,
+#         None,
+#         flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,
+#     )
 
+#     cv2.imshow("Final Detection", res)
 
-root = tk.Tk()
-screen_width = root.winfo_screenwidth()
-screen_height = root.winfo_screenheight()
-root.destroy()
+# # need payment and rebuilding open cv
+# def DetectFrogSurf(self, frame):
+#     # 1. Setup
+#     template = cv2.imread("frog_template.png")
+#     template_gray = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
+#     frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-ASPECT_RATIO = screen_width / screen_height
-print(f"Screen resolution: {screen_width}x{screen_height}")
-print(f"Aspect ratio: {ASPECT_RATIO:.2f} ({screen_width}:{screen_height})")
+#     # 2. Detect and Compute using SURF
+#     # 400 is the Hessian Threshold (higher = fewer, but stronger features)
+#     surf = cv2.xfeatures2d.SURF_create(400)
 
-gameplayer = GamePlayer()
-gameplayer.RunLoop()
+#     kp1, des1 = surf.detectAndCompute(template_gray, None)
+#     kp2, des2 = surf.detectAndCompute(frame_gray, None)
+
+#     # 3. Match using BFMatcher
+#     # SURF descriptors are floating point, so use NORM_L2
+#     bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True)
+#     matches = bf.match(des1, des2)
+
+#     # 4. Sort and Filter
+#     matches = sorted(matches, key=lambda x: x.distance)
+#     good = [m for m in matches if m.distance < 0.1]  # SURF distances vary from SIFT
+
+#     # 5. Draw
+#     res = cv2.drawMatches(
+#         template_gray,
+#         kp1,
+#         frame_gray,
+#         kp2,
+#         good,
+#         None,
+#         flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,
+#     )
+
+#     cv2.imshow("SURF Detection", res)
+
+# def DetectFrogOrb(self, frame):
+#     # 1. Setup
+#     template_gray = cv2.cvtColor(self.frog_template, cv2.COLOR_BGR2GRAY)
+#     frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+#     # 2. Initialize ORB detector
+#     orb = cv2.ORB_create()
+
+#     # 3. Detect and Compute
+#     kp1, des1 = orb.detectAndCompute(template_gray, None)
+#     kp2, des2 = orb.detectAndCompute(frame_gray, None)
+
+#     # Check if descriptors were found to avoid crashing the matcher
+#     if des1 is None or des2 is None:
+#         return
+
+#     # 4. Match using BFMatcher
+#     # IMPORTANT: Use NORM_HAMMING for ORB
+#     bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
+#     matches = bf.knnMatch(des1, des2, k=2)
+
+#     # 5. Filter good matches
+#     good = []
+#     for m, n in matches:
+#         if m.distance < 0.5 * n.distance:
+#             good.append(m)
+
+#     # 6. Draw
+#     res = cv2.drawMatches(
+#         template_gray,
+#         kp1,
+#         frame_gray,
+#         kp2,
+#         good,
+#         None,
+#         flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,
+#     )
+
+#     cv2.imshow("ORB Detection", res)
+
+#     # 7. Localize the Frog (Homography)
+#     # We need at least 4 matches to find a homography matrix
+#     if len(good) > 4:
+#         # Extract location of good matches
+#         src_pts = np.float32([kp1[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
+#         dst_pts = np.float32([kp2[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
+
+#         # Find the transformation matrix
+#         M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+
+#         if M is not None:
+#             # Get dimensions of the template
+#             h, w = template_gray.shape
+#             # Define the corners of the template
+#             pts = np.float32(
+#                 [[0, 0], [0, h - 1], [w - 1, h - 1], [w - 1, 0]]
+#             ).reshape(-1, 1, 2)
+
+#             # Project corners into the frame to find the "contour"
+#             dst = cv2.perspectiveTransform(pts, M)
+
+#             # 8. Calculate Minimum Enclosing Circle
+#             # dst contains the 4 corners of the detected object in the frame
+#             (x, y), radius = cv2.minEnclosingCircle(dst)
+#             center = (int(x), int(y))
+#             radius = int(radius)
+
+#             # 9. Draw Results
+#             # Draw the contour (the bounding box)
+#             frame = cv2.polylines(
+#                 frame, [np.int32(dst)], True, (0, 255, 0), 3, cv2.LINE_AA
+#             )
+#             # Draw the circle
+#             cv2.circle(frame, center, radius, (255, 0, 255), 2)
+
+#             # print(f"Frog found at {center} with radius {radius}")
+
+#     cv2.imshow("Detection with Circle", frame)
