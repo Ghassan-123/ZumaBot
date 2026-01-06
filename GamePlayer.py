@@ -73,7 +73,7 @@ class GamePlayer:
             )
 
             frog_mask = cv2.dilate(frog_mask, (7, 7), iterations=10)
-            cv2.imshow("frog", frog_mask)
+            # cv2.imshow("frog", frog_mask)
 
             frog_contours, _ = cv2.findContours(
                 frog_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
@@ -83,7 +83,6 @@ class GamePlayer:
                 # Get the largest contour by area
                 frog_contour = max(frog_contours, key=cv2.contourArea)
                 area = cv2.contourArea(frog_contour)
-                # print(area)
 
                 if (area_threshold - 400) < area < (area_threshold + 400):
                     (frog_cx, frog_cy), frog_radius = cv2.minEnclosingCircle(
@@ -281,7 +280,7 @@ class GamePlayer:
 
             hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
-            if keyboard.is_pressed("s"):
+            if not start and keyboard.is_pressed("s"):
                 start = True
 
             if start:
@@ -598,14 +597,36 @@ class GamePlayer:
         adj = defaultdict(list)
         balls = list(self.balls.values())
 
-        for i in range(len(balls)):
-            for j in range(i + 1, len(balls)):
-                d = np.linalg.norm(balls[i].center - balls[j].center)
-                if d < self.MATCH_DIST * 1.5:  # tune
-                    adj[balls[i].id].append(balls[j].id)
-                    adj[balls[j].id].append(balls[i].id)
+        # Precompute distances
+        for ball in balls:
+            neighbors = []
 
-        return adj
+            for other in balls:
+                if ball.id == other.id:
+                    continue
+
+                d = np.linalg.norm(ball.center - other.center)
+
+                if d < self.MATCH_DIST * 1.5:
+                    neighbors.append((d, other.id))
+
+            # Sort neighbors by distance (closest first)
+            neighbors.sort(key=lambda x: x[0])
+
+            # Keep ONLY the closest 2
+            for _, nid in neighbors[:2]:
+                adj[ball.id].append(nid)
+
+        # Ensure symmetry (undirected graph)
+        clean_adj = defaultdict(list)
+        for a in adj:
+            for b in adj[a]:
+                if a not in clean_adj[b]:
+                    clean_adj[b].append(a)
+                if b not in clean_adj[a]:
+                    clean_adj[a].append(b)
+
+        return clean_adj
 
     def GetChains(self, adj):
         visited = set()
@@ -646,11 +667,13 @@ class GamePlayer:
         current = start_id
         prev = None
 
-        while current is not None:
+        while True:
             ordered.append(current)
             visited.add(current)
 
-            next_nodes = [n for n in adj[current] if n != prev]
+            # choose only unvisited neighbors
+            next_nodes = [n for n in adj[current] if n != prev and n not in visited]
+
             if not next_nodes:
                 break
 
