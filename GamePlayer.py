@@ -2,6 +2,7 @@ from WindowCapturer import WindowCapturer
 import numpy as np
 from collections import defaultdict
 from scipy.spatial.distance import euclidean
+from Ball import Ball
 import pyautogui
 import keyboard
 import time
@@ -21,6 +22,14 @@ class GamePlayer:
         self.masks_cleaned = {}
         self.current_ball = None
         self.second_color = None
+
+        self.all_balls_mask = None
+
+        self.balls = {}  # id -> Ball
+        self.next_ball_id = 0
+
+        self.MATCH_DIST = 25  # px (tune)
+        self.MAX_MISSING_TIME = 0.4  # seconds
 
     def GetFinishPos(self, hsv, area_threshold=4800):
         if not self.finish_pos:
@@ -299,19 +308,35 @@ class GamePlayer:
                         (255, 255, 255),
                         2,
                     )  # Center dot
+                self.GetRed(hsv)
+                self.GetGreen(hsv)
+                self.GetBlue(hsv)
+                self.GetYellow(hsv)
+                self.GetAllBalls()
+                self.GetCurrentPlayBall()
+                # print("current_ball: ", self.current_ball)
+                # print("second_color: ", self.second_color)
+                detections = self.DetectBalls()
+                self.UpdateBallTracks(detections)
+
+                chains = self.GetSortedBallsPerChain()
+
+                for chain_id, chain in enumerate(chains):
+                    for order, ball in enumerate(chain):
+                        x, y = ball.center.astype(int)
+                        cv2.putText(
+                            frame,
+                            f"C{chain_id}:{order}",
+                            (x + 6, y - 6),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.45,
+                            (0, 255, 255),
+                            2,
+                        )
+                cv2.imshow("Test", frame)
 
             # Show Frame
-            cv2.imshow("Test", frame)
             cv2.imshow("Screen Capture", hsv)
-            self.GetRed(hsv)
-            self.GetGreen(hsv)
-            self.GetBlue(hsv)
-            self.GetYellow(hsv)
-            self.GetAllBalls()
-
-            self.GetCurrentPlayBall()
-            print("current_ball: ", self.current_ball)
-            print("second_color: ", self.second_color)
 
             # self.DetectFrogSift(frame)
             # self.DetectFrogSurf(frame)
@@ -469,26 +494,26 @@ class GamePlayer:
             )
             all_balls = cv2.bitwise_or(first_half, second_half)
 
-            if  self.frog_pos:
+            if self.frog_pos:
                 (frx, fry), frr = self.frog_pos
                 cv2.circle(
-                all_balls,
-                center=(int(frx), int(fry)),
-                radius=int(frr),
-                color=0,
-                thickness=-1   # filled circle
-            )
-            if  self.finish_pos:
+                    all_balls,
+                    center=(int(frx), int(fry)),
+                    radius=int(frr) + 1,
+                    color=0,
+                    thickness=-1,  # filled circle
+                )
+            if self.finish_pos:
                 for fpos in self.finish_pos:
                     (ffx, ffy), ffr = fpos
                     cv2.circle(
-                    all_balls,
-                    center=(int(ffx), int(ffy)),
-                    radius=int(ffr),
-                    color=0,
-                    thickness=-1   # filled circle
-                )
-
+                        all_balls,
+                        center=(int(ffx), int(ffy)),
+                        radius=int(ffr),
+                        color=0,
+                        thickness=-1,  # filled circle
+                    )
+            self.all_balls_mask = all_balls
             cv2.imshow("balls", all_balls)
 
     def GetCurrentPlayBall(self):
@@ -515,6 +540,141 @@ class GamePlayer:
                             self.second_color = key
                         else:
                             pass
+
+    def DetectBalls(self):
+        if self.all_balls_mask is None:
+            return []
+
+        detections = []
+
+        num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
+            self.all_balls_mask, connectivity=8
+        )
+
+        for i in range(1, num_labels):  # skip background
+            area = stats[i, cv2.CC_STAT_AREA]
+            if 50 < area < 500:
+                cx, cy = centroids[i]
+                detections.append(np.array([cx, cy]))
+
+        return detections
+
+    def UpdateBallTracks(self, detections):
+        assigned = set()
+
+        for ball in self.balls.values():
+            best_dist = float("inf")
+            best_idx = None
+
+            for i, center in enumerate(detections):
+                if i in assigned:
+                    continue
+
+                dist = np.linalg.norm(ball.center - center)
+                if dist < best_dist:
+                    best_dist = dist
+                    best_idx = i
+
+            if best_idx is not None and best_dist < self.MATCH_DIST:
+                ball.center = detections[best_idx]
+                ball.last_seen = time.time()
+                assigned.add(best_idx)
+
+        for i, center in enumerate(detections):
+            if i not in assigned:
+                self.balls[self.next_ball_id] = Ball(
+                    self.next_ball_id, center, color=None
+                )
+                self.next_ball_id += 1
+
+        now = time.time()
+        self.balls = {
+            k: v
+            for k, v in self.balls.items()
+            if now - v.last_seen < self.MAX_MISSING_TIME
+        }
+
+    def BuildAdjacency(self):
+        adj = defaultdict(list)
+        balls = list(self.balls.values())
+
+        for i in range(len(balls)):
+            for j in range(i + 1, len(balls)):
+                d = np.linalg.norm(balls[i].center - balls[j].center)
+                if d < self.MATCH_DIST * 1.5:  # tune
+                    adj[balls[i].id].append(balls[j].id)
+                    adj[balls[j].id].append(balls[i].id)
+
+        return adj
+
+    def GetChains(self, adj):
+        visited = set()
+        chains = []
+
+        for ball_id in adj:
+            if ball_id in visited:
+                continue
+
+            stack = [ball_id]
+            component = set()
+
+            while stack:
+                cur = stack.pop()
+                if cur in visited:
+                    continue
+                visited.add(cur)
+                component.add(cur)
+                for n in adj[cur]:
+                    if n not in visited:
+                        stack.append(n)
+
+            chains.append(component)
+
+        return chains
+
+    def FindLeadingBall(self, chain, adj):
+        ends = [bid for bid in chain if len(adj[bid]) == 1]
+
+        if not ends:
+            return None  # closed loop (rare but possible)
+        return ends[0]  # Zuma always has exactly one loose end
+
+    def OrderChain(self, start_id, adj):
+        ordered = []
+        visited = set()
+
+        current = start_id
+        prev = None
+
+        while current is not None:
+            ordered.append(current)
+            visited.add(current)
+
+            next_nodes = [n for n in adj[current] if n != prev]
+            if not next_nodes:
+                break
+
+            prev = current
+            current = next_nodes[0]
+
+        return ordered
+
+    def GetSortedBallsPerChain(self):
+        adj = self.BuildAdjacency()
+        chains = self.GetChains(adj)
+
+        result = []  # list of ordered chains
+
+        for chain in chains:
+            lead = self.FindLeadingBall(chain, adj)
+            if lead is None:
+                continue
+
+            ordered_ids = self.OrderChain(lead, adj)
+            ordered_balls = [self.balls[i] for i in ordered_ids]
+            result.append(ordered_balls)
+
+        return result
 
     # def SortBalls(self, mask):
     #     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
