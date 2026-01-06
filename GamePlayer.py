@@ -1,5 +1,7 @@
 from WindowCapturer import WindowCapturer
 import numpy as np
+from collections import defaultdict
+from scipy.spatial.distance import euclidean
 import pyautogui
 import keyboard
 import time
@@ -15,7 +17,8 @@ class GamePlayer:
         self.WindowCapturer = WindowCapturer()
         self.frog_template = cv2.imread("frog_template.png")
 
-        self.masks = {}
+        self.masks_row = {}
+        self.masks_cleaned = {}
         self.current_ball = None
         self.second_color = None
 
@@ -71,7 +74,7 @@ class GamePlayer:
                 # Get the largest contour by area
                 frog_contour = max(frog_contours, key=cv2.contourArea)
                 area = cv2.contourArea(frog_contour)
-                print(area)
+                # print(area)
 
                 if (area_threshold - 400) < area < (area_threshold + 400):
                     (frog_cx, frog_cy), frog_radius = cv2.minEnclosingCircle(
@@ -229,7 +232,7 @@ class GamePlayer:
                 # Draw the circle
                 cv2.circle(frame, center, radius, (255, 0, 255), 2)
 
-                print(f"Frog found at {center} with radius {radius}")
+                # print(f"Frog found at {center} with radius {radius}")
 
         cv2.imshow("Detection with Circle", frame)
 
@@ -304,6 +307,7 @@ class GamePlayer:
             self.GetGreen(hsv)
             self.GetBlue(hsv)
             self.GetYellow(hsv)
+            self.GetAllBalls()
 
             self.GetCurrentPlayBall()
             print("current_ball: ", self.current_ball)
@@ -362,32 +366,73 @@ class GamePlayer:
         kernel = np.ones((3, 3), np.uint8)
         red_mask = cv2.morphologyEx(mask_red, cv2.MORPH_CLOSE, kernel)
 
-        self.masks["red"] = red_mask
+        self.masks_row["red"] = red_mask
 
-        cv2.imshow("red", red_mask)
+        red_mask[:50, :] = 0
+        temp = np.zeros_like(red_mask)
+        contours, _ = cv2.findContours(
+            red_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
+        if contours:
+            for contour in contours:
+                (cx, cy), _ = cv2.minEnclosingCircle(contour)
+                area = cv2.contourArea(contour)
+                if 50 < area < 450:
+                    cv2.circle(temp, (int(cx), int(cy)), 10, (255, 255, 255), -1)
+        self.masks_cleaned["red"] = temp
+
+        cv2.imshow("red", temp)
 
     def GetGreen(self, hsv):
-        lower_green = (50, 115, 110)
-        upper_green = (70, 180, 255)
+        lower_green = (50, 160, 165)
+        upper_green = (70, 230, 255)
         mask_green = cv2.inRange(hsv, lower_green, upper_green)
         kernel = np.ones((3, 3), np.uint8)
         # green_mask = cv2.morphologyEx(mask_green, cv2.MORPH_OPEN, kernel)
         green_mask = cv2.morphologyEx(mask_green, cv2.MORPH_CLOSE, kernel)
 
-        self.masks["green"] = green_mask
+        self.masks_row["green"] = green_mask
 
-        cv2.imshow("green", green_mask)
+        green_mask[:50, :] = 0
+        temp = np.zeros_like(green_mask)
+        contours, _ = cv2.findContours(
+            green_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
+        if contours:
+            for contour in contours:
+                (cx, cy), _ = cv2.minEnclosingCircle(contour)
+                area = cv2.contourArea(contour)
+                if 100 < area < 500:
+                    cv2.circle(temp, (int(cx), int(cy)), 10, (255, 255, 255), -1)
+        self.masks_cleaned["green"] = temp
+
+        cv2.imshow("green", temp)
 
     def GetBlue(self, hsv):
-        lower_blue = (90, 130, 160)
-        upper_blue = (124, 210, 255)
+        lower_blue = (90, 123, 155)
+        upper_blue = (124, 231, 255)
         mask_blue = cv2.inRange(hsv, lower_blue, upper_blue)
+        blue_mask = cv2.erode(mask_blue, (3, 3), iterations=3)
         kernel = np.ones((3, 3), np.uint8)
-        # blue_mask = cv2.morphologyEx(mask_blue, cv2.MORPH_CLOSE, kernel)
+        blue_mask = cv2.morphologyEx(blue_mask, cv2.MORPH_CLOSE, kernel)
+        blue_mask = cv2.morphologyEx(blue_mask, cv2.MORPH_OPEN, kernel)
 
-        self.masks["blue"] = mask_blue
+        self.masks_row["blue"] = mask_blue
 
-        cv2.imshow("blue", mask_blue)
+        blue_mask[:50, :] = 0
+        temp = np.zeros_like(blue_mask)
+        contours, _ = cv2.findContours(
+            blue_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
+        if contours:
+            for contour in contours:
+                (cx, cy), radius = cv2.minEnclosingCircle(contour)
+                area = cv2.contourArea(contour)
+                if 40 < area < 600:
+                    cv2.circle(temp, (int(cx), int(cy)), 10, (255, 255, 255), -1)
+        self.masks_cleaned["blue"] = temp
+
+        cv2.imshow("blue", temp)
 
     def GetYellow(self, hsv):
         lower_yellow = (20, 160, 200)
@@ -396,13 +441,59 @@ class GamePlayer:
         kernel = np.ones((3, 3), np.uint8)
         yellow_mask = cv2.morphologyEx(mask_yellow, cv2.MORPH_CLOSE, kernel)
 
-        self.masks["yellow"] = yellow_mask
+        self.masks_row["yellow"] = yellow_mask
 
-        cv2.imshow("yellow", yellow_mask)
+        yellow_mask[:50, :] = 0
+        temp = np.zeros_like(yellow_mask)
+        contours, _ = cv2.findContours(
+            yellow_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
+        if contours:
+            for contour in contours:
+                (cx, cy), _ = cv2.minEnclosingCircle(contour)
+                area = cv2.contourArea(contour)
+                if 50 < area < 500:
+                    cv2.circle(temp, (int(cx), int(cy)), 10, (255, 255, 255), -1)
+        self.masks_cleaned["yellow"] = temp
+
+        cv2.imshow("yellow", temp)
+
+    def GetAllBalls(self):
+        if self.masks_cleaned:
+
+            first_half = cv2.bitwise_or(
+                self.masks_cleaned["red"], self.masks_cleaned["green"]
+            )
+            second_half = cv2.bitwise_or(
+                self.masks_cleaned["blue"], self.masks_cleaned["yellow"]
+            )
+            all_balls = cv2.bitwise_or(first_half, second_half)
+
+            if  self.frog_pos:
+                (frx, fry), frr = self.frog_pos
+                cv2.circle(
+                all_balls,
+                center=(int(frx), int(fry)),
+                radius=int(frr),
+                color=0,
+                thickness=-1   # filled circle
+            )
+            if  self.finish_pos:
+                for fpos in self.finish_pos:
+                    (ffx, ffy), ffr = fpos
+                    cv2.circle(
+                    all_balls,
+                    center=(int(ffx), int(ffy)),
+                    radius=int(ffr),
+                    color=0,
+                    thickness=-1   # filled circle
+                )
+
+            cv2.imshow("balls", all_balls)
 
     def GetCurrentPlayBall(self):
-        if self.masks and self.frog_pos:
-            for key, mask in self.masks.items():
+        if self.masks_row and self.frog_pos:
+            for key, mask in self.masks_row.items():
                 (cx, cy), radius = self.frog_pos
 
                 roi_mask = mask[
@@ -424,6 +515,45 @@ class GamePlayer:
                             self.second_color = key
                         else:
                             pass
+
+    # def SortBalls(self, mask):
+    #     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
+    #         mask, connectivity=8
+    #     )
+    #     centers = {}
+    #     for i in range(1, num_labels):
+    #         centers[i] = np.array(centroids[i])
+    #     adj = defaultdict(list)
+    #     THRESH = 1.5 * BALL_DIAMETER  # tune this
+
+    #     for i in centers:
+    #         for j in centers:
+    #             if i != j:
+    #                 if euclidean(centers[i], centers[j]) < THRESH:
+    #                     adj[i].append(j)
+    #     start = None
+    #     for k, v in adj.items():
+    #         if len(v) == 1:
+    #             start = k
+    #             break
+    #     ordered = []
+    #     visited = set()
+
+    #     current = start
+    #     prev = None
+
+    #     while current is not None:
+    #         ordered.append(current)
+    #         visited.add(current)
+
+    #         next_nodes = [n for n in adj[current] if n != prev]
+    #         if not next_nodes:
+    #             break
+
+    #         prev = current
+    #         current = next_nodes[0]
+    #     sorted_centers = [centers[i] for i in ordered]
+    #     print(sorted_centers)
 
 
 gameplayer = GamePlayer()
