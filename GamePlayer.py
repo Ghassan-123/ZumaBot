@@ -1,8 +1,8 @@
 from WindowCapturer import WindowCapturer
-import numpy as np
 from collections import defaultdict
-from scipy.spatial.distance import euclidean
 from Ball import Ball
+import tkinter as tk
+import numpy as np
 import pyautogui
 import keyboard
 import time
@@ -392,7 +392,11 @@ class GamePlayer:
 
         self.masks_row["red"] = red_mask
 
-        red_mask[:50, :] = 0
+        if ASPECT_RATIO == 1.6:
+            red_mask[:60, :] = 0
+        else:
+            red_mask[:50, :] = 0
+
         temp = np.zeros_like(red_mask)
         contours, _ = cv2.findContours(
             red_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
@@ -417,7 +421,11 @@ class GamePlayer:
 
         self.masks_row["green"] = green_mask
 
-        green_mask[:50, :] = 0
+        if ASPECT_RATIO == 1.6:
+            green_mask[:60, :] = 0
+        else:
+            green_mask[:50, :] = 0
+
         temp = np.zeros_like(green_mask)
         contours, _ = cv2.findContours(
             green_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
@@ -443,7 +451,11 @@ class GamePlayer:
 
         self.masks_row["blue"] = mask_blue
 
-        blue_mask[:50, :] = 0
+        if ASPECT_RATIO == 1.6:
+            blue_mask[:60, :] = 0
+        else:
+            blue_mask[:50, :] = 0
+
         temp = np.zeros_like(blue_mask)
         contours, _ = cv2.findContours(
             blue_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
@@ -467,7 +479,11 @@ class GamePlayer:
 
         self.masks_row["yellow"] = yellow_mask
 
-        yellow_mask[:50, :] = 0
+        if ASPECT_RATIO == 1.6:
+            yellow_mask[:60, :] = 0
+        else:
+            yellow_mask[:50, :] = 0
+
         temp = np.zeros_like(yellow_mask)
         contours, _ = cv2.findContours(
             yellow_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
@@ -738,6 +754,15 @@ class GamePlayer:
     #     sorted_centers = [centers[i] for i in ordered]
     #     print(sorted_centers)
 
+
+root = tk.Tk()
+screen_width = root.winfo_screenwidth()
+screen_height = root.winfo_screenheight()
+root.destroy()
+
+ASPECT_RATIO = screen_width / screen_height
+print(f"Screen resolution: {screen_width}x{screen_height}")
+print(f"Aspect ratio: {ASPECT_RATIO:.2f} ({screen_width}:{screen_height})")
 
 gameplayer = GamePlayer()
 gameplayer.RunLoop()
