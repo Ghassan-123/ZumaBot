@@ -30,11 +30,7 @@ class GamePlayerChains:
         self.all_balls_mask = None
         self.test_mask = None
 
-        self.balls = {}  # id -> Ball
-        self.next_ball_id = 0
-
-        self.MATCH_DIST = 30  # px (tune)
-        self.MAX_MISSING_TIME = 0.4  # seconds
+        self.blobs = {}
 
     def GetFinishPos(self, hsv, area_threshold=4800):
         if not self.finish_pos:
@@ -64,7 +60,7 @@ class GamePlayerChains:
                     # Only append if larger than threshold
                     if (area_threshold - 200) < area < (area_threshold + 200):
                         (cx, cy), radius = cv2.minEnclosingCircle(cnt)
-                        self.finish_pos.append(((cx, cy), radius))
+                        self.finish_pos.append(((cx, cy), radius + 2))
 
                 if self.finish_pos:
                     return self.finish_pos
@@ -119,6 +115,24 @@ class GamePlayerChains:
 
         self.masks_row["red"] = red_mask
 
+        radius = 1
+        kernel = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
+        )
+        temp = cv2.morphologyEx(red_mask, cv2.MORPH_CLOSE, kernel, iterations=1)
+
+        radius = 4
+        kernel = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
+        )  # adjust size for your balls
+        temp = cv2.dilate(temp, kernel, iterations=1)
+
+        radius = 3
+        kernel = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
+        )
+        temp = cv2.morphologyEx(temp, cv2.MORPH_CLOSE, kernel, iterations=1)
+
         # temp = np.zeros_like(red_mask)
         # contours, _ = cv2.findContours(
         #     red_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
@@ -129,8 +143,13 @@ class GamePlayerChains:
         #         area = cv2.contourArea(contour)
         #         if 50 < area < 450:
         #             cv2.circle(temp, (int(cx), int(cy)), 10, (255, 255, 255), -1)
-        # self.masks_cleaned["red"] = temp
-        # cv2.imshow("red", temp)
+
+        self.masks_cleaned["red"] = temp
+
+        dist = cv2.distanceTransform(temp, cv2.DIST_L2, 5)
+        ball_centers = self.local_maxima(dist, min_distance=30)
+
+        self.blobs["red"] = self.blob_center_and_count(temp, ball_centers)
 
     def GetGreen(self, hsv):
         lower_green = (50, 160, 165)
@@ -142,6 +161,24 @@ class GamePlayerChains:
 
         self.masks_row["green"] = green_mask
 
+        radius = 1
+        kernel = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
+        )
+        temp = cv2.morphologyEx(green_mask, cv2.MORPH_CLOSE, kernel, iterations=1)
+
+        radius = 4
+        kernel = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
+        )  # adjust size for your balls
+        temp = cv2.dilate(temp, kernel, iterations=1)
+
+        radius = 3
+        kernel = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
+        )
+        temp = cv2.morphologyEx(temp, cv2.MORPH_CLOSE, kernel, iterations=1)
+
         # temp = np.zeros_like(green_mask)
         # contours, _ = cv2.findContours(
         #     green_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
@@ -152,8 +189,13 @@ class GamePlayerChains:
         #         area = cv2.contourArea(contour)
         #         if 100 < area < 500:
         #             cv2.circle(temp, (int(cx), int(cy)), 10, (255, 255, 255), -1)
-        # self.masks_cleaned["green"] = temp
-        # cv2.imshow("green", temp)
+
+        self.masks_cleaned["green"] = temp
+
+        dist = cv2.distanceTransform(temp, cv2.DIST_L2, 5)
+        ball_centers = self.local_maxima(dist, min_distance=30)
+
+        self.blobs["green"] = self.blob_center_and_count(temp, ball_centers)
 
     def GetBlue(self, hsv):
         lower_blue = (95, 180, 190)
@@ -165,6 +207,24 @@ class GamePlayerChains:
 
         self.masks_row["blue"] = blue_mask  # mask_blue
 
+        radius = 1
+        kernel = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
+        )
+        temp = cv2.morphologyEx(blue_mask, cv2.MORPH_CLOSE, kernel, iterations=1)
+
+        radius = 4
+        kernel = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
+        )  # adjust size for your balls
+        temp = cv2.dilate(temp, kernel, iterations=1)
+
+        radius = 3
+        kernel = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
+        )
+        temp = cv2.morphologyEx(temp, cv2.MORPH_CLOSE, kernel, iterations=1)
+
         # temp = np.zeros_like(blue_mask)
         # contours, _ = cv2.findContours(
         #     blue_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
@@ -175,8 +235,13 @@ class GamePlayerChains:
         #         area = cv2.contourArea(contour)
         #         if 40 < area < 600:
         #             cv2.circle(temp, (int(cx), int(cy)), 10, (255, 255, 255), -1)
-        # self.masks_cleaned["blue"] = temp
-        # cv2.imshow("blue", temp)
+
+        self.masks_cleaned["blue"] = temp
+
+        dist = cv2.distanceTransform(temp, cv2.DIST_L2, 5)
+        ball_centers = self.local_maxima(dist, min_distance=30)
+
+        self.blobs["blue"] = self.blob_center_and_count(temp, ball_centers)
 
     def GetYellow(self, hsv):
         lower_yellow = (20, 160, 200)
@@ -188,6 +253,35 @@ class GamePlayerChains:
 
         self.masks_row["yellow"] = yellow_mask
 
+        radius = 1
+        kernel = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
+        )
+        temp = cv2.morphologyEx(yellow_mask, cv2.MORPH_CLOSE, kernel, iterations=1)
+
+        radius = 4
+        kernel = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
+        )  # adjust size for your balls
+        temp = cv2.dilate(temp, kernel, iterations=1)
+
+        radius = 3
+        kernel = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
+        )
+        temp = cv2.morphologyEx(temp, cv2.MORPH_CLOSE, kernel, iterations=1)
+
+        if self.finish_pos:
+            for fpos in self.finish_pos:
+                (ffx, ffy), ffr = fpos
+                cv2.circle(
+                    temp,
+                    center=(int(ffx), int(ffy)),
+                    radius=int(ffr),
+                    color=0,
+                    thickness=-1,  # filled circle
+                )
+
         # temp = np.zeros_like(yellow_mask)
         # contours, _ = cv2.findContours(
         #     yellow_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
@@ -198,8 +292,13 @@ class GamePlayerChains:
         #         area = cv2.contourArea(contour)
         #         if 50 < area < 500:
         #             cv2.circle(temp, (int(cx), int(cy)), 10, (255, 255, 255), -1)
-        # self.masks_cleaned["yellow"] = temp
-        # cv2.imshow("yellow", temp)
+
+        self.masks_cleaned["yellow"] = temp
+
+        dist = cv2.distanceTransform(temp, cv2.DIST_L2, 5)
+        ball_centers = self.local_maxima(dist, min_distance=30)
+
+        self.blobs["yellow"] = self.blob_center_and_count(temp, ball_centers)
 
     def process_colors(self, hsv):
         threads = [
@@ -250,9 +349,25 @@ class GamePlayerChains:
 
             hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
             if self.aspect_ratio == 1.6:
+                # cut top
                 hsv[:64, :] = (0, 0, 0)
+                hsv[:80, :112] = (0, 0, 0)
+                hsv[:80, -112:] = (0, 0, 0)
+
+                # edges (left, right, bottom)
+                hsv[:, :10] = (0, 0, 0)
+                hsv[:, -10:] = (0, 0, 0)
+                hsv[-10:, :] = (0, 0, 0)
             else:
+                # cut top
                 hsv[:50, :] = (0, 0, 0)
+                hsv[:60, :100] = (0, 0, 0)
+                hsv[:60, 100:] = (0, 0, 0)
+
+                # edges (left, right, bottom)
+                hsv[:, :10] = (0, 0, 0)
+                hsv[:, -10:] = (0, 0, 0)
+                hsv[-10:, :] = (0, 0, 0)
 
             if not start and keyboard.is_pressed("s"):
                 start = True
@@ -283,29 +398,57 @@ class GamePlayerChains:
                     )  # Center dot
                 self.process_colors(hsv)
 
-                self.GetAllBalls(frame)
-                self.GetCurrentPlayBall()
+                # self.GetAllBalls(frame)
 
-                detections = self.DetectBalls()
-                self.UpdateBallTracks(detections)
-                chains = self.GetSortedBallsPerChain()
-                # frame = frame[100:400, 100:500]
+                detections = self.GetAllBalls(frame)
 
-                for chain_id, chain in enumerate(chains):
-                    for order, ball in enumerate(chain):
-                        x, y = ball.center.astype(int)
+                all_chains = self.order_balls_by_finishes(detections)
+                for idx, chain in enumerate(all_chains):
+                    for order, center in enumerate(chain):
                         cv2.putText(
                             frame,
-                            f"C{chain_id}:{order}",
-                            (x + 6, y - 6),
+                            f"C{idx}:{order}",
+                            (int(center[0]) + 6, int(center[1]) - 6),
                             cv2.FONT_HERSHEY_SIMPLEX,
-                            0.45,
+                            0.25,
                             (0, 255, 255),
                             2,
                         )
-                cv2.imshow("Test", frame)
+
+                # cv2.imshow("Red", self.masks_cleaned["red"])
+                # cv2.imshow("Green", self.masks_cleaned["green"])
+                # cv2.imshow("Blue", self.masks_cleaned["blue"])
+                # cv2.imshow("Yellow", self.masks_cleaned["yellow"])
+
+                for key, val in self.blobs.items():
+                    if key == "red":
+                        color = (0, 0, 255)
+                    elif key == "green":
+                        color = (0, 255, 0)
+                    elif key == "blue":
+                        color = (255, 0, 0)
+                    elif key == "yellow":
+                        color = (0, 255, 255)
+                    else:
+                        color = (255, 255, 255)
+
+                    for center, count in val:
+                        cv2.putText(
+                            frame,
+                            f"{count}",
+                            (int(center[0]) + 12, int(center[1]) - 12),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.5,
+                            color,
+                            2,
+                        )
+
+                self.GetCurrentPlayBall()
+                # print(f"current_ball: {self.current_ball}")
+                # print(f"second_ball: {self.second_color}")
 
             # Show Frame
+            cv2.imshow("Test", frame)
             cv2.imshow("Screen Capture", hsv)
 
             # self.DetectFrogSift(frame)
@@ -347,15 +490,6 @@ class GamePlayerChains:
 
     def GetAllBalls(self, frame):
         if self.masks_row:
-            # if self.masks_cleaned:
-            # first_half = cv2.bitwise_or(
-            #     self.masks_cleaned["red"], self.masks_cleaned["green"]
-            # )
-            # second_half = cv2.bitwise_or(
-            #     self.masks_cleaned["blue"], self.masks_cleaned["yellow"]
-            # )
-            # all_balls = cv2.bitwise_or(first_half, second_half)
-
             first_test = cv2.bitwise_or(self.masks_row["red"], self.masks_row["green"])
             second_test = cv2.bitwise_or(
                 self.masks_row["blue"], self.masks_row["yellow"]
@@ -374,39 +508,22 @@ class GamePlayerChains:
             kernel = cv2.getStructuringElement(
                 cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
             )  # adjust size for your balls
-            dilated_mask = cv2.dilate(all_balls, kernel, iterations=1)
+            all_balls = cv2.dilate(all_balls, kernel, iterations=1)
 
             radius = 3
             kernel = cv2.getStructuringElement(
                 cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
             )
-            dilated_mask = cv2.morphologyEx(
-                dilated_mask, cv2.MORPH_CLOSE, kernel, iterations=1
+            all_balls = cv2.morphologyEx(
+                all_balls, cv2.MORPH_CLOSE, kernel, iterations=1
             )
-
-            contours, _ = cv2.findContours(
-                dilated_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-            )
-            # Convert to float32 for distance transform
-            dist = cv2.distanceTransform(dilated_mask, cv2.DIST_L2, 5)
-
-            ball_centers = self.local_maxima(dist, min_distance=30)
-            for center in ball_centers:
-                cv2.circle(
-                    frame,
-                    center=(int(center[0]), int(center[1])),
-                    radius=5,
-                    color=(255, 0, 0),
-                    thickness=-1,  # filled circle
-                )
-            cv2.imshow("testing",frame)
 
             if self.frog_pos:
                 (frx, fry), frr = self.frog_pos
                 cv2.circle(
                     all_balls,
                     center=(int(frx), int(fry)),
-                    radius=int(frr) + 1,
+                    radius=int(frr) + 10,
                     color=0,
                     thickness=-1,  # filled circle
                 )
@@ -420,41 +537,30 @@ class GamePlayerChains:
                         color=0,
                         thickness=-1,  # filled circle
                     )
+
+            # Convert to float32 for distance transform
+            dist = cv2.distanceTransform(all_balls, cv2.DIST_L2, 5)
+
+            ball_centers = self.local_maxima(dist, min_distance=30)
+            for center in ball_centers:
+                cv2.circle(
+                    frame,
+                    center=(int(center[0]), int(center[1])),
+                    radius=5,
+                    color=(255, 0, 0),
+                    thickness=-1,  # filled circle
+                )
+            cv2.imshow("testing", frame)
+
             self.all_balls_mask = all_balls
             # self.test_mask = test_balls
 
-            cv2.imshow("all balls", dilated_mask)
+            cv2.imshow("all balls", all_balls)
             # cv2.imshow("test balls", test_balls)
-
-    def DetectBalls(self):
-        if self.all_balls_mask is None:
-            return []
-
-        detections = []
-
-        num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
-            self.all_balls_mask, connectivity=8
-        )
-
-        indices = sorted(
-            range(1, num_labels), key=lambda i: stats[i, cv2.CC_STAT_AREA], reverse=True
-        )
-
-        min_dist_sq = 25 * 25
-
-        for i in indices:
-            area = stats[i, cv2.CC_STAT_AREA]
-            if 50 < area < 500:
-                cx, cy = centroids[i]
-                candidate = np.array([cx, cy])
-
-                if all(np.sum((candidate - d) ** 2) >= min_dist_sq for d in detections):
-                    detections.append(candidate)
-
-        return detections
+            return ball_centers
 
     def GetCurrentPlayBall(self):
-        if self.masks_row and self.frog_pos:
+        if self.masks_cleaned and self.frog_pos:
             for key, mask in self.masks_row.items():
                 (cx, cy), radius = self.frog_pos
 
@@ -473,189 +579,10 @@ class GamePlayerChains:
 
                         if area > 200:
                             self.current_ball = key
-                        elif 5 < area < 50:
+                        elif area > 20:
                             self.second_color = key
                         else:
                             pass
-
-    def UpdateBallTracks(self, detections):
-        assigned = set()
-
-        for ball in self.balls.values():
-            best_dist = float("inf")
-            best_idx = None
-
-            for i, center in enumerate(detections):
-                if i in assigned:
-                    continue
-
-                dist = np.linalg.norm(ball.center - center)
-                if dist < best_dist:
-                    best_dist = dist
-                    best_idx = i
-
-            if best_idx is not None and best_dist < self.MATCH_DIST:
-                ball.center = detections[best_idx]
-                ball.last_seen = time.time()
-                assigned.add(best_idx)
-
-        for i, center in enumerate(detections):
-            if i not in assigned:
-                self.balls[self.next_ball_id] = Ball(
-                    self.next_ball_id, center, color=None
-                )
-                self.next_ball_id += 1
-
-        now = time.time()
-        self.balls = {
-            k: v
-            for k, v in self.balls.items()
-            if now - v.last_seen < self.MAX_MISSING_TIME
-        }
-
-    def BuildAdjacency(self):
-        adj = defaultdict(list)
-        balls = list(self.balls.values())
-
-        # Precompute distances
-        for ball in balls:
-            neighbors = []
-
-            for other in balls:
-                if ball.id == other.id:
-                    continue
-
-                d = np.linalg.norm(ball.center - other.center)
-
-                if d < self.MATCH_DIST * 1.5:
-                    neighbors.append((d, other.id))
-
-            # Sort neighbors by distance (closest first)
-            neighbors.sort(key=lambda x: x[0])
-
-            # Keep ONLY the closest 2
-            for _, nid in neighbors[:2]:
-                adj[ball.id].append(nid)
-
-        # Ensure symmetry (undirected graph)
-        clean_adj = defaultdict(list)
-        for a in adj:
-            for b in adj[a]:
-                if a not in clean_adj[b]:
-                    clean_adj[b].append(a)
-                if b not in clean_adj[a]:
-                    clean_adj[a].append(b)
-
-        return clean_adj
-
-    def GetChains(self, adj):
-        visited = set()
-        chains = []
-
-        for ball_id in adj:
-            if ball_id in visited:
-                continue
-
-            stack = [ball_id]
-            component = set()
-
-            while stack:
-                cur = stack.pop()
-                if cur in visited:
-                    continue
-                visited.add(cur)
-                component.add(cur)
-                for n in adj[cur]:
-                    if n not in visited:
-                        stack.append(n)
-
-            chains.append(component)
-
-        return chains
-
-    def FindLeadingBall(self, chain, adj):
-        ends = []
-        # x_range = (100, 500)
-        # y_range = (100, 400)
-        x_range = None
-        y_range = None
-
-        candidates = []
-
-        for bid in chain:
-            # only loose ends
-            if len(adj[bid]) != 1:
-                continue
-
-            ball = self.balls.get(bid)
-            if ball is None:
-                continue
-
-            cx, cy = ball.center
-
-            # check position ranges
-            if x_range and not (x_range[0] <= cx <= x_range[1]):
-                continue
-            if y_range and not (y_range[0] <= cy <= y_range[1]):
-                continue
-
-            candidates.append(bid)
-
-        if not candidates:
-            return None  # no valid loose end
-
-        # if reference point given, pick closest to it
-        if self.frog_pos:
-            (rx, ry), _ = self.frog_pos
-            closest = min(
-                candidates,
-                key=lambda bid: np.linalg.norm(
-                    self.balls[bid].center - np.array([rx, ry])
-                ),
-            )
-            return closest
-
-        # otherwise, just return first candidate
-        return candidates[0]
-
-    def OrderChain(self, start_id, adj):
-        ordered = []
-        visited = set()
-
-        current = start_id
-        prev = None
-
-        while True:
-            ordered.append(current)
-            visited.add(current)
-
-            # choose only unvisited neighbors
-            next_nodes = [n for n in adj[current] if n != prev and n not in visited]
-
-            if not next_nodes:
-                break
-
-            prev = current
-            current = next_nodes[0]
-
-        return ordered
-
-    def GetSortedBallsPerChain(self):
-        adj = self.BuildAdjacency()
-        chains = self.GetChains(adj)
-
-        result = []  # list of ordered chains
-
-        for chain in chains:
-            lead = self.FindLeadingBall(chain, adj)
-            if lead is None:
-                continue
-
-            ordered_ids = self.OrderChain(lead, adj)
-            ordered_balls = [self.balls[i] for i in ordered_ids]
-            result.append(ordered_balls)
-
-        return result
 
     def local_maxima(self, dist, min_distance=20):
         centers = []
@@ -673,12 +600,101 @@ class GamePlayerChains:
 
             # Convert to original coordinates
             y, x = max_loc[1] - min_distance, max_loc[0] - min_distance
-            centers.append((x, y))
+            centers.append(np.array([x, y]))
 
             # Zero out a circular region around this peak to enforce min_distance
             cv2.circle(padded, max_loc, min_distance, 0, -1)
 
         return centers
+
+    def order_balls_by_finishes(self, detections):
+        """
+        detections: list of ball centers (np.array)
+        returns: list of chains (each chain is a list of centers)
+        """
+        if not self.finish_pos:
+            return []
+
+        chains = []
+        remaining = detections.copy()  # balls that haven't been assigned yet
+
+        for finish in self.finish_pos:
+            (fx, fy), _ = finish
+            start_point = np.array([fx, fy])
+
+            chain = []
+            if not remaining:
+                chains.append(chain)
+                continue
+
+            # Start with the ball closest to this finish
+            dists = [np.linalg.norm(c - start_point) for c in remaining]
+            idx = np.argmin(dists)
+            current = remaining.pop(idx)
+            chain.append(current)
+
+            # Build chain by nearest neighbor
+            while remaining:
+                dists = [np.linalg.norm(c - chain[-1]) for c in remaining]
+                min_idx = np.argmin(dists)
+                # Optional: stop chain if distance too big (avoid jumping chains)
+                if dists[min_idx] > 80:  # adjust threshold based on your scale
+                    break
+                current = remaining.pop(min_idx)
+                chain.append(current)
+
+            chains.append(chain)
+
+        # sort chains by length descending
+        chains.sort(key=lambda c: len(c), reverse=True)
+        return chains
+
+    def blob_center_and_count(self, mask, centers):
+        """
+        mask: binary mask of all balls (single-channel, 0 or 255)
+        centers: list of np.array([x, y]) detected from distance transform
+        returns: list of tuples [(center, count), ...] per blob
+                center: np.array([x, y]) representing the mean of centers in blob
+                count: number of centers in that blob
+        """
+        num_labels, labels = cv2.connectedComponents(mask)
+        blob_data = []
+
+        for label in range(1, num_labels):  # skip background
+            # Find all centers in this blob
+            blob_centers = [c for c in centers if labels[int(c[1]), int(c[0])] == label]
+
+            if blob_centers:
+                blob_centers_np = np.array(blob_centers)
+                mean_center = np.mean(blob_centers_np, axis=0)  # average x and y
+                count = len(blob_centers)
+                blob_data.append((mean_center, count))
+            else:
+                pass
+                # No detected centers inside this blob
+                # Optionally, you can use the blob's centroid from connectedComponents stats
+                # blob_data.append((None, 0))
+
+        return blob_data
+
+    # def order_balls_nearest(self, centers, start_point):
+    #     centers = centers.copy()
+    #     ordered = []
+
+    #     # Find the ball closest to start_point
+    #     dists = [np.linalg.norm(c - start_point) for c in centers]
+    #     idx = np.argmin(dists)
+    #     current = centers.pop(idx)
+    #     ordered.append(current)
+
+    #     while centers:
+    #         # Find the ball closest to the last in ordered
+    #         dists = [np.linalg.norm(c - ordered[-1]) for c in centers]
+    #         idx = np.argmin(dists)
+    #         current = centers.pop(idx)
+    #         ordered.append(current)
+
+    #     return ordered
 
 
 # def DetectFrogSift(self, frame):
