@@ -28,6 +28,7 @@ class GamePlayer:
         self.second_color = None
 
         self.all_balls_mask = None
+        self.test_mask = None
 
         self.balls = {}  # id -> Ball
         self.next_ball_id = 0
@@ -112,90 +113,92 @@ class GamePlayer:
         mask_red1 = cv2.inRange(hsv, lower_red1, upper_red1)
         mask_red2 = cv2.inRange(hsv, lower_red2, upper_red2)
         mask_red = cv2.bitwise_or(mask_red1, mask_red2)
+
         kernel = np.ones((3, 3), np.uint8)
         red_mask = cv2.morphologyEx(mask_red, cv2.MORPH_CLOSE, kernel)
 
         self.masks_row["red"] = red_mask
 
-        temp = np.zeros_like(red_mask)
-        contours, _ = cv2.findContours(
-            red_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        )
-        if contours:
-            for contour in contours:
-                (cx, cy), _ = cv2.minEnclosingCircle(contour)
-                area = cv2.contourArea(contour)
-                if 50 < area < 450:
-                    cv2.circle(temp, (int(cx), int(cy)), 10, (255, 255, 255), -1)
-        self.masks_cleaned["red"] = temp
+        # temp = np.zeros_like(red_mask)
+        # contours, _ = cv2.findContours(
+        #     red_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        # )
+        # if contours:
+        #     for contour in contours:
+        #         (cx, cy), _ = cv2.minEnclosingCircle(contour)
+        #         area = cv2.contourArea(contour)
+        #         if 50 < area < 450:
+        #             cv2.circle(temp, (int(cx), int(cy)), 10, (255, 255, 255), -1)
+        # self.masks_cleaned["red"] = temp
         # cv2.imshow("red", temp)
 
     def GetGreen(self, hsv):
         lower_green = (50, 160, 165)
         upper_green = (70, 230, 255)
         mask_green = cv2.inRange(hsv, lower_green, upper_green)
+
         kernel = np.ones((3, 3), np.uint8)
         green_mask = cv2.morphologyEx(mask_green, cv2.MORPH_CLOSE, kernel)
 
         self.masks_row["green"] = green_mask
 
-        temp = np.zeros_like(green_mask)
-        contours, _ = cv2.findContours(
-            green_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        )
-        if contours:
-            for contour in contours:
-                (cx, cy), _ = cv2.minEnclosingCircle(contour)
-                area = cv2.contourArea(contour)
-                if 100 < area < 500:
-                    cv2.circle(temp, (int(cx), int(cy)), 10, (255, 255, 255), -1)
-        self.masks_cleaned["green"] = temp
+        # temp = np.zeros_like(green_mask)
+        # contours, _ = cv2.findContours(
+        #     green_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        # )
+        # if contours:
+        #     for contour in contours:
+        #         (cx, cy), _ = cv2.minEnclosingCircle(contour)
+        #         area = cv2.contourArea(contour)
+        #         if 100 < area < 500:
+        #             cv2.circle(temp, (int(cx), int(cy)), 10, (255, 255, 255), -1)
+        # self.masks_cleaned["green"] = temp
         # cv2.imshow("green", temp)
 
     def GetBlue(self, hsv):
-        lower_blue = (90, 123, 155)
-        upper_blue = (124, 231, 255)
+        lower_blue = (95, 180, 190)
+        upper_blue = (130, 230, 255)
         mask_blue = cv2.inRange(hsv, lower_blue, upper_blue)
-        blue_mask = cv2.erode(mask_blue, (3, 3), iterations=3)
+
         kernel = np.ones((3, 3), np.uint8)
-        blue_mask = cv2.morphologyEx(blue_mask, cv2.MORPH_CLOSE, kernel)
-        blue_mask = cv2.morphologyEx(blue_mask, cv2.MORPH_OPEN, kernel)
+        blue_mask = cv2.morphologyEx(mask_blue, cv2.MORPH_CLOSE, kernel)
 
-        self.masks_row["blue"] = mask_blue
+        self.masks_row["blue"] = blue_mask  # mask_blue
 
-        temp = np.zeros_like(blue_mask)
-        contours, _ = cv2.findContours(
-            blue_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        )
-        if contours:
-            for contour in contours:
-                (cx, cy), radius = cv2.minEnclosingCircle(contour)
-                area = cv2.contourArea(contour)
-                if 40 < area < 600:
-                    cv2.circle(temp, (int(cx), int(cy)), 10, (255, 255, 255), -1)
-        self.masks_cleaned["blue"] = temp
+        # temp = np.zeros_like(blue_mask)
+        # contours, _ = cv2.findContours(
+        #     blue_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        # )
+        # if contours:
+        #     for contour in contours:
+        #         (cx, cy), radius = cv2.minEnclosingCircle(contour)
+        #         area = cv2.contourArea(contour)
+        #         if 40 < area < 600:
+        #             cv2.circle(temp, (int(cx), int(cy)), 10, (255, 255, 255), -1)
+        # self.masks_cleaned["blue"] = temp
         # cv2.imshow("blue", temp)
 
     def GetYellow(self, hsv):
         lower_yellow = (20, 160, 200)
         upper_yellow = (30, 230, 255)
         mask_yellow = cv2.inRange(hsv, lower_yellow, upper_yellow)
+
         kernel = np.ones((3, 3), np.uint8)
         yellow_mask = cv2.morphologyEx(mask_yellow, cv2.MORPH_CLOSE, kernel)
 
         self.masks_row["yellow"] = yellow_mask
 
-        temp = np.zeros_like(yellow_mask)
-        contours, _ = cv2.findContours(
-            yellow_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        )
-        if contours:
-            for contour in contours:
-                (cx, cy), _ = cv2.minEnclosingCircle(contour)
-                area = cv2.contourArea(contour)
-                if 50 < area < 500:
-                    cv2.circle(temp, (int(cx), int(cy)), 10, (255, 255, 255), -1)
-        self.masks_cleaned["yellow"] = temp
+        # temp = np.zeros_like(yellow_mask)
+        # contours, _ = cv2.findContours(
+        #     yellow_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        # )
+        # if contours:
+        #     for contour in contours:
+        #         (cx, cy), _ = cv2.minEnclosingCircle(contour)
+        #         area = cv2.contourArea(contour)
+        #         if 50 < area < 500:
+        #             cv2.circle(temp, (int(cx), int(cy)), 10, (255, 255, 255), -1)
+        # self.masks_cleaned["yellow"] = temp
         # cv2.imshow("yellow", temp)
 
     def process_colors(self, hsv):
@@ -342,14 +345,29 @@ class GamePlayer:
         cv2.destroyAllWindows()
 
     def GetAllBalls(self):
-        if self.masks_cleaned:
-            first_half = cv2.bitwise_or(
-                self.masks_cleaned["red"], self.masks_cleaned["green"]
+        if self.masks_row:
+            # if self.masks_cleaned:
+            # first_half = cv2.bitwise_or(
+            #     self.masks_cleaned["red"], self.masks_cleaned["green"]
+            # )
+            # second_half = cv2.bitwise_or(
+            #     self.masks_cleaned["blue"], self.masks_cleaned["yellow"]
+            # )
+            # all_balls = cv2.bitwise_or(first_half, second_half)
+
+            first_test = cv2.bitwise_or(self.masks_row["red"], self.masks_row["green"])
+            second_test = cv2.bitwise_or(
+                self.masks_row["blue"], self.masks_row["yellow"]
             )
-            second_half = cv2.bitwise_or(
-                self.masks_cleaned["blue"], self.masks_cleaned["yellow"]
+            all_balls = cv2.bitwise_or(first_test, second_test)
+
+            radius = 1
+            kernel = cv2.getStructuringElement(
+                cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
             )
-            all_balls = cv2.bitwise_or(first_half, second_half)
+            all_balls = cv2.morphologyEx(
+                all_balls, cv2.MORPH_CLOSE, kernel, iterations=1
+            )
 
             if self.frog_pos:
                 (frx, fry), frr = self.frog_pos
@@ -371,7 +389,10 @@ class GamePlayer:
                         thickness=-1,  # filled circle
                     )
             self.all_balls_mask = all_balls
-            cv2.imshow("balls", all_balls)
+            # self.test_mask = test_balls
+
+            cv2.imshow("all balls", all_balls)
+            # cv2.imshow("test balls", test_balls)
 
     def DetectBalls(self):
         if self.all_balls_mask is None:
@@ -383,11 +404,20 @@ class GamePlayer:
             self.all_balls_mask, connectivity=8
         )
 
-        for i in range(1, num_labels):  # skip background
+        indices = sorted(
+            range(1, num_labels), key=lambda i: stats[i, cv2.CC_STAT_AREA], reverse=True
+        )
+
+        min_dist_sq = 25 * 25
+
+        for i in indices:
             area = stats[i, cv2.CC_STAT_AREA]
             if 50 < area < 500:
                 cx, cy = centroids[i]
-                detections.append(np.array([cx, cy]))
+                candidate = np.array([cx, cy])
+
+                if all(np.sum((candidate - d) ** 2) >= min_dist_sq for d in detections):
+                    detections.append(candidate)
 
         return detections
 
