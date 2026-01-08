@@ -1,5 +1,7 @@
 from GamePlayer import GamePlayer
+from GamePlayerChains import GamePlayerChains
 import tkinter as tk
+
 
 class Main:
     def __init__(self):
@@ -13,7 +15,7 @@ class Main:
         print(f"Aspect ratio: {self.aspect_ratio:.2f} ({screen_width}:{screen_height})")
 
     def start(self):
-        gameplayer = GamePlayer(self.aspect_ratio)
+        gameplayer = GamePlayerChains(self.aspect_ratio)
         gameplayer.RunLoop()
 
 
