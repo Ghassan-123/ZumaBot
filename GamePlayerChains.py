@@ -15,6 +15,7 @@ import threading
 class GamePlayerChains:
     def __init__(self, aspect_ratio):
         self.aspect_ratio = aspect_ratio
+        self.window = None
 
         self.start_pos = None
         self.finish_pos = []
@@ -31,6 +32,11 @@ class GamePlayerChains:
         self.test_mask = None
 
         self.blobs = {}
+
+        self.start = False
+        self.can_shoot = False
+        self.can_shoot_time = 0
+        self.can_shoot_duration = 1.5  # seconds
 
     def GetFinishPos(self, hsv, area_threshold=4800):
         if not self.finish_pos:
@@ -318,18 +324,16 @@ class GamePlayerChains:
         prev_time = time.time()
 
         # Get game window
-        window = self.WindowCapturer.GetWindow("Zuma Deluxe 1.1.0.0")
+        self.window = self.WindowCapturer.GetWindow("Zuma Deluxe 1.1.0.0")
 
         def on_mouse(event, x, y, flags, param):
             if event == cv2.EVENT_LBUTTONDOWN:
                 print((y, x))
                 print(hsv[y, x])
 
-        start = False
-
         while True:
             # Get current frame
-            frame = self.WindowCapturer.CaptureWindow(window)
+            frame = self.WindowCapturer.CaptureWindow(self.window)
 
             # Calculate FPS
             curr_time = time.time()
@@ -369,10 +373,10 @@ class GamePlayerChains:
                 hsv[:, -10:] = (0, 0, 0)
                 hsv[-10:, :] = (0, 0, 0)
 
-            if not start and keyboard.is_pressed("s"):
-                start = True
+            if not self.start and keyboard.is_pressed("s"):
+                self.start = True
 
-            if start:
+            if self.start:
                 finishPos = self.GetFinishPos(hsv)
                 frogPos = self.GetFrogPos(hsv)
 
@@ -444,6 +448,8 @@ class GamePlayerChains:
                         )
 
                 self.GetCurrentPlayBall()
+                self.choose_ball_play()
+                self.reset_shooting()
                 # print(f"current_ball: {self.current_ball}")
                 # print(f"second_ball: {self.second_color}")
 
@@ -676,6 +682,93 @@ class GamePlayerChains:
                 # blob_data.append((None, 0))
 
         return blob_data
+
+    def choose_ball_play(self):
+        if self.current_ball:
+            valid_blobs = self.blobs[self.current_ball]
+            if valid_blobs:
+                valid_blobs.sort(key=lambda x: x[1], reverse=True)
+                for blob in valid_blobs:
+                    target_center, _ = blob
+
+                    # Collect ALL blob centers (from chains or blobs)
+                    all_centers = []
+                    for blobs in self.blobs.values():
+                        for center, _ in blobs:
+                            all_centers.append(center)
+
+                    clear = self.is_path_clear(target_center, all_centers)
+
+                    if clear:
+                        if self.can_shoot:
+                            print("🔥 Clear shot!")
+                            win_x = target_center[0]
+                            win_y = target_center[1]
+
+                            # Convert window-relative to screen coordinates
+                            screen_x = self.window.left + win_x
+                            screen_y = self.window.top + win_y
+
+                            # Move mouse
+                            pyautogui.moveTo(screen_x, screen_y, duration=0.1)
+
+                            # Click
+                            pyautogui.click()
+
+                            # Small delay
+                            time.sleep(0.1)
+
+                            #
+                            self.can_shoot = False
+                            self.can_shoot_time = time.time()
+                    else:
+                        print("⛔ Shot blocked")
+
+    def is_path_clear(self, target_center, all_blob_centers, radius=18):
+        """
+        frog_pos: np.array([x, y])
+        target_center: np.array([x, y])
+        all_blob_centers: list of np.array([x, y])
+        radius: blocking tolerance (≈ ball radius)
+        """
+        (fx, fy), _ = self.frog_pos
+        frog = np.array([fx, fy], dtype=np.float32)
+        target = np.array(target_center, dtype=np.float32)
+
+        shot_vec = target - frog
+        shot_len = np.linalg.norm(shot_vec)
+
+        if shot_len < 1e-5:
+            return False
+
+        shot_dir = shot_vec / shot_len
+
+        for c in all_blob_centers:
+            c = np.array(c, dtype=np.float32)
+
+            # Skip the target blob itself
+            if np.allclose(c, target, atol=1.0):
+                continue
+
+            to_blob = c - frog
+            proj = np.dot(to_blob, shot_dir)
+
+            # Blob is behind frog or beyond target
+            if proj <= 0 or proj >= shot_len:
+                continue
+
+            # Perpendicular distance to shot line
+            perp_dist = np.linalg.norm(to_blob - proj * shot_dir)
+
+            if perp_dist <= radius:
+                return False  # blocked
+
+        return True  # clear
+
+    def reset_shooting(self):
+        if not self.can_shoot:
+            if time.time() - self.can_shoot_time >= self.can_shoot_duration:
+                self.can_shoot = True
 
     # def order_balls_nearest(self, centers, start_point):
     #     centers = centers.copy()
