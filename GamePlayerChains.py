@@ -36,7 +36,7 @@ class GamePlayerChains:
         self.start = False
         self.can_shoot = False
         self.can_shoot_time = 0
-        self.can_shoot_duration = 1.5  # seconds
+        self.can_shoot_duration = 2  # seconds
 
     def GetFinishPos(self, hsv, area_threshold=4800):
         if not self.finish_pos:
