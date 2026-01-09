@@ -95,7 +95,7 @@ class GamePlayerChains:
                     (frog_cx, frog_cy), frog_radius = cv2.minEnclosingCircle(
                         frog_contour
                     )
-                    self.frog_pos = ((frog_cx, frog_cy), frog_radius + 10)
+                    self.frog_pos = ((frog_cx, frog_cy), frog_radius + 20)
 
                 if self.frog_pos:
                     return self.frog_pos
@@ -150,7 +150,17 @@ class GamePlayerChains:
         #         if 50 < area < 450:
         #             cv2.circle(temp, (int(cx), int(cy)), 10, (255, 255, 255), -1)
 
-        self.masks_cleaned["red"] = temp
+        self.masks_cleaned["red"] = temp.copy()
+
+        if self.frog_pos:
+            (frx, fry), frr = self.frog_pos
+            cv2.circle(
+                temp,
+                center=(int(frx), int(fry)),
+                radius=int(frr),
+                color=0,
+                thickness=-1,  # filled circle
+            )
 
         dist = cv2.distanceTransform(temp, cv2.DIST_L2, 5)
         ball_centers = self.local_maxima(dist, min_distance=30)
@@ -196,7 +206,17 @@ class GamePlayerChains:
         #         if 100 < area < 500:
         #             cv2.circle(temp, (int(cx), int(cy)), 10, (255, 255, 255), -1)
 
-        self.masks_cleaned["green"] = temp
+        self.masks_cleaned["green"] = temp.copy()
+
+        if self.frog_pos:
+            (frx, fry), frr = self.frog_pos
+            cv2.circle(
+                temp,
+                center=(int(frx), int(fry)),
+                radius=int(frr),
+                color=0,
+                thickness=-1,  # filled circle
+            )
 
         dist = cv2.distanceTransform(temp, cv2.DIST_L2, 5)
         ball_centers = self.local_maxima(dist, min_distance=30)
@@ -242,7 +262,17 @@ class GamePlayerChains:
         #         if 40 < area < 600:
         #             cv2.circle(temp, (int(cx), int(cy)), 10, (255, 255, 255), -1)
 
-        self.masks_cleaned["blue"] = temp
+        self.masks_cleaned["blue"] = temp.copy()
+
+        if self.frog_pos:
+            (frx, fry), frr = self.frog_pos
+            cv2.circle(
+                temp,
+                center=(int(frx), int(fry)),
+                radius=int(frr),
+                color=0,
+                thickness=-1,  # filled circle
+            )
 
         dist = cv2.distanceTransform(temp, cv2.DIST_L2, 5)
         ball_centers = self.local_maxima(dist, min_distance=30)
@@ -265,6 +295,17 @@ class GamePlayerChains:
         )
         temp = cv2.morphologyEx(yellow_mask, cv2.MORPH_CLOSE, kernel, iterations=1)
 
+        if self.finish_pos:
+            for fpos in self.finish_pos:
+                (ffx, ffy), ffr = fpos
+                cv2.circle(
+                    temp,
+                    center=(int(ffx), int(ffy)),
+                    radius=int(ffr),
+                    color=0,
+                    thickness=-1,  # filled circle
+                )
+
         radius = 4
         kernel = cv2.getStructuringElement(
             cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
@@ -277,17 +318,6 @@ class GamePlayerChains:
         )
         temp = cv2.morphologyEx(temp, cv2.MORPH_CLOSE, kernel, iterations=1)
 
-        if self.finish_pos:
-            for fpos in self.finish_pos:
-                (ffx, ffy), ffr = fpos
-                cv2.circle(
-                    temp,
-                    center=(int(ffx), int(ffy)),
-                    radius=int(ffr),
-                    color=0,
-                    thickness=-1,  # filled circle
-                )
-
         # temp = np.zeros_like(yellow_mask)
         # contours, _ = cv2.findContours(
         #     yellow_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
@@ -299,7 +329,17 @@ class GamePlayerChains:
         #         if 50 < area < 500:
         #             cv2.circle(temp, (int(cx), int(cy)), 10, (255, 255, 255), -1)
 
-        self.masks_cleaned["yellow"] = temp
+        self.masks_cleaned["yellow"] = temp.copy()
+
+        if self.frog_pos:
+            (frx, fry), frr = self.frog_pos
+            cv2.circle(
+                temp,
+                center=(int(frx), int(fry)),
+                radius=int(frr),
+                color=0,
+                thickness=-1,  # filled circle
+            )
 
         dist = cv2.distanceTransform(temp, cv2.DIST_L2, 5)
         ball_centers = self.local_maxima(dist, min_distance=30)
@@ -420,8 +460,8 @@ class GamePlayerChains:
                         )
 
                 # cv2.imshow("Red", self.masks_cleaned["red"])
-                # cv2.imshow("Green", self.masks_cleaned["green"])
-                # cv2.imshow("Blue", self.masks_cleaned["blue"])
+                cv2.imshow("Green", self.masks_cleaned["green"])
+                cv2.imshow("Blue", self.masks_cleaned["blue"])
                 # cv2.imshow("Yellow", self.masks_cleaned["yellow"])
 
                 for key, val in self.blobs.items():
@@ -436,7 +476,7 @@ class GamePlayerChains:
                     else:
                         color = (255, 255, 255)
 
-                    for center, count in val:
+                    for center, count, _ in val:
                         cv2.putText(
                             frame,
                             f"{count}",
@@ -448,7 +488,8 @@ class GamePlayerChains:
                         )
 
                 self.GetCurrentPlayBall()
-                self.choose_ball_play()
+
+                self.choose_ball_play(detections)
                 self.reset_shooting()
                 # print(f"current_ball: {self.current_ball}")
                 # print(f"second_ball: {self.second_color}")
@@ -529,7 +570,7 @@ class GamePlayerChains:
                 cv2.circle(
                     all_balls,
                     center=(int(frx), int(fry)),
-                    radius=int(frr) + 10,
+                    radius=int(frr),
                     color=0,
                     thickness=-1,  # filled circle
                 )
@@ -556,7 +597,6 @@ class GamePlayerChains:
                     color=(255, 0, 0),
                     thickness=-1,  # filled circle
                 )
-            cv2.imshow("testing", frame)
 
             self.all_balls_mask = all_balls
             # self.test_mask = test_balls
@@ -582,8 +622,9 @@ class GamePlayerChains:
                 if contours:
                     for contour in contours:
                         area = cv2.contourArea(contour)
+                        # print("current ball area:", area)
 
-                        if area > 200:
+                        if 460 > area > 140:
                             self.current_ball = key
                         elif area > 20:
                             self.second_color = key
@@ -674,7 +715,7 @@ class GamePlayerChains:
                 blob_centers_np = np.array(blob_centers)
                 mean_center = np.mean(blob_centers_np, axis=0)  # average x and y
                 count = len(blob_centers)
-                blob_data.append((mean_center, count))
+                blob_data.append((mean_center, count, blob_centers))
             else:
                 pass
                 # No detected centers inside this blob
@@ -683,25 +724,24 @@ class GamePlayerChains:
 
         return blob_data
 
-    def choose_ball_play(self):
+    def choose_ball_play(self, balls_centers):
         if self.current_ball:
             valid_blobs = self.blobs[self.current_ball]
             if valid_blobs:
                 valid_blobs.sort(key=lambda x: x[1], reverse=True)
                 for blob in valid_blobs:
-                    target_center, _ = blob
+                    target_center, _, in_centers = blob
 
-                    # Collect ALL blob centers (from chains or blobs)
-                    all_centers = []
-                    for blobs in self.blobs.values():
-                        for center, _ in blobs:
-                            all_centers.append(center)
+                    filtered_centers = []
+                    for c in balls_centers:
+                        if not any(np.allclose(c, ic, atol=5.0) for ic in in_centers):
+                            filtered_centers.append(c)
 
-                    clear = self.is_path_clear(target_center, all_centers)
+                    clear = self.is_path_clear(target_center, filtered_centers)
 
                     if clear:
                         if self.can_shoot:
-                            print("🔥 Clear shot!")
+                            print(f"🔥 Clear shot! {self.current_ball}")
                             win_x = target_center[0]
                             win_y = target_center[1]
 
@@ -715,21 +755,29 @@ class GamePlayerChains:
                             # Click
                             pyautogui.click()
 
-                            # Small delay
-                            time.sleep(0.1)
+                            # Reset current_ball
+                            self.current_ball = self.second_color
+                            self.second_color = None
 
-                            #
+                            # reset shooting
                             self.can_shoot = False
                             self.can_shoot_time = time.time()
-                    else:
-                        print("⛔ Shot blocked")
 
-    def is_path_clear(self, target_center, all_blob_centers, radius=18):
+                            # Small delay
+                            time.sleep(0.1)
+                    else:
+                        continue
+                        # print(f"target_center: {target_center}, score: {score}")
+                        # print("⛔ Shot blocked")
+            # print("finised call")
+
+    def is_path_clear(self, target_center, all_centers, radius=20):
         """
-        frog_pos: np.array([x, y])
+        Checks if the path from the frog to target is blocked by any other balls.
+
         target_center: np.array([x, y])
         all_blob_centers: list of np.array([x, y])
-        radius: blocking tolerance (≈ ball radius)
+        radius: allowed sideways tolerance (how far a ball can be from the line)
         """
         (fx, fy), _ = self.frog_pos
         frog = np.array([fx, fy], dtype=np.float32)
@@ -737,29 +785,36 @@ class GamePlayerChains:
 
         shot_vec = target - frog
         shot_len = np.linalg.norm(shot_vec)
-
         if shot_len < 1e-5:
             return False
 
         shot_dir = shot_vec / shot_len
 
-        for c in all_blob_centers:
+        # cv2.line(
+        #     frame,
+        #     (int(frog[0]), int(frog[1])),
+        #     (int(target_center[0]), int(target_center[1])),
+        #     (0, 255, 0),
+        #     1,
+        # )
+        for c in all_centers:
             c = np.array(c, dtype=np.float32)
 
-            # Skip the target blob itself
-            if np.allclose(c, target, atol=1.0):
+            # Skip the target itself
+            if np.allclose(c, target, atol=5.0):
                 continue
 
             to_blob = c - frog
             proj = np.dot(to_blob, shot_dir)
 
-            # Blob is behind frog or beyond target
+            # Only balls strictly between frog and target
             if proj <= 0 or proj >= shot_len:
                 continue
 
-            # Perpendicular distance to shot line
+            # Distance perpendicular to shot line
             perp_dist = np.linalg.norm(to_blob - proj * shot_dir)
 
+            # If ball is close enough to line, it blocks the shot
             if perp_dist <= radius:
                 return False  # blocked
 
