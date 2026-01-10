@@ -38,6 +38,15 @@ class GamePlayerChains:
         self.can_shoot_time = 0
         self.can_shoot_duration = 2  # seconds
 
+        self.balls_centers = []
+
+        self.kernels = {
+            1: np.ones((3, 3), np.uint8),
+            2: cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)),
+            3: cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9)),
+            4: cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7)),
+        }
+
     def GetFinishPos(self, hsv, area_threshold=4800):
         if not self.finish_pos:
             finish_mask = cv2.inRange(
@@ -116,39 +125,17 @@ class GamePlayerChains:
         mask_red2 = cv2.inRange(hsv, lower_red2, upper_red2)
         mask_red = cv2.bitwise_or(mask_red1, mask_red2)
 
-        kernel = np.ones((3, 3), np.uint8)
-        red_mask = cv2.morphologyEx(mask_red, cv2.MORPH_CLOSE, kernel)
+        red_mask = cv2.morphologyEx(mask_red, cv2.MORPH_CLOSE, self.kernels[1])
 
         self.masks_row["red"] = red_mask
 
-        radius = 1
-        kernel = cv2.getStructuringElement(
-            cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
+        temp = cv2.morphologyEx(
+            red_mask, cv2.MORPH_CLOSE, self.kernels[2], iterations=1
         )
-        temp = cv2.morphologyEx(red_mask, cv2.MORPH_CLOSE, kernel, iterations=1)
 
-        radius = 4
-        kernel = cv2.getStructuringElement(
-            cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
-        )  # adjust size for your balls
-        temp = cv2.dilate(temp, kernel, iterations=1)
+        temp = cv2.dilate(temp, self.kernels[3], iterations=1)
 
-        radius = 3
-        kernel = cv2.getStructuringElement(
-            cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
-        )
-        temp = cv2.morphologyEx(temp, cv2.MORPH_CLOSE, kernel, iterations=1)
-
-        # temp = np.zeros_like(red_mask)
-        # contours, _ = cv2.findContours(
-        #     red_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        # )
-        # if contours:
-        #     for contour in contours:
-        #         (cx, cy), _ = cv2.minEnclosingCircle(contour)
-        #         area = cv2.contourArea(contour)
-        #         if 50 < area < 450:
-        #             cv2.circle(temp, (int(cx), int(cy)), 10, (255, 255, 255), -1)
+        temp = cv2.morphologyEx(temp, cv2.MORPH_CLOSE, self.kernels[4], iterations=1)
 
         self.masks_cleaned["red"] = temp.copy()
 
@@ -162,49 +149,27 @@ class GamePlayerChains:
                 thickness=-1,  # filled circle
             )
 
-        dist = cv2.distanceTransform(temp, cv2.DIST_L2, 5)
-        ball_centers = self.local_maxima(dist, min_distance=30)
+        # dist = cv2.distanceTransform(temp, cv2.DIST_L2, 5)
+        # ball_centers = self.local_maxima(dist, min_distance=30)
 
-        self.blobs["red"] = self.blob_center_and_count(temp, ball_centers)
+        # self.blobs["red"] = self.blob_center_and_count(temp, ball_centers)
 
     def GetGreen(self, hsv):
         lower_green = (50, 160, 165)
         upper_green = (70, 230, 255)
         mask_green = cv2.inRange(hsv, lower_green, upper_green)
 
-        kernel = np.ones((3, 3), np.uint8)
-        green_mask = cv2.morphologyEx(mask_green, cv2.MORPH_CLOSE, kernel)
+        green_mask = cv2.morphologyEx(mask_green, cv2.MORPH_CLOSE, self.kernels[1])
 
         self.masks_row["green"] = green_mask
 
-        radius = 1
-        kernel = cv2.getStructuringElement(
-            cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
+        temp = cv2.morphologyEx(
+            green_mask, cv2.MORPH_CLOSE, self.kernels[2], iterations=1
         )
-        temp = cv2.morphologyEx(green_mask, cv2.MORPH_CLOSE, kernel, iterations=1)
 
-        radius = 4
-        kernel = cv2.getStructuringElement(
-            cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
-        )  # adjust size for your balls
-        temp = cv2.dilate(temp, kernel, iterations=1)
+        temp = cv2.dilate(temp, self.kernels[3], iterations=1)
 
-        radius = 3
-        kernel = cv2.getStructuringElement(
-            cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
-        )
-        temp = cv2.morphologyEx(temp, cv2.MORPH_CLOSE, kernel, iterations=1)
-
-        # temp = np.zeros_like(green_mask)
-        # contours, _ = cv2.findContours(
-        #     green_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        # )
-        # if contours:
-        #     for contour in contours:
-        #         (cx, cy), _ = cv2.minEnclosingCircle(contour)
-        #         area = cv2.contourArea(contour)
-        #         if 100 < area < 500:
-        #             cv2.circle(temp, (int(cx), int(cy)), 10, (255, 255, 255), -1)
+        temp = cv2.morphologyEx(temp, cv2.MORPH_CLOSE, self.kernels[4], iterations=1)
 
         self.masks_cleaned["green"] = temp.copy()
 
@@ -218,49 +183,27 @@ class GamePlayerChains:
                 thickness=-1,  # filled circle
             )
 
-        dist = cv2.distanceTransform(temp, cv2.DIST_L2, 5)
-        ball_centers = self.local_maxima(dist, min_distance=30)
+        # dist = cv2.distanceTransform(temp, cv2.DIST_L2, 5)
+        # ball_centers = self.local_maxima(dist, min_distance=30)
 
-        self.blobs["green"] = self.blob_center_and_count(temp, ball_centers)
+        # self.blobs["green"] = self.blob_center_and_count(temp, ball_centers)
 
     def GetBlue(self, hsv):
         lower_blue = (95, 180, 190)
         upper_blue = (130, 230, 255)
         mask_blue = cv2.inRange(hsv, lower_blue, upper_blue)
 
-        kernel = np.ones((3, 3), np.uint8)
-        blue_mask = cv2.morphologyEx(mask_blue, cv2.MORPH_CLOSE, kernel)
+        blue_mask = cv2.morphologyEx(mask_blue, cv2.MORPH_CLOSE, self.kernels[1])
 
         self.masks_row["blue"] = blue_mask  # mask_blue
 
-        radius = 1
-        kernel = cv2.getStructuringElement(
-            cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
+        temp = cv2.morphologyEx(
+            blue_mask, cv2.MORPH_CLOSE, self.kernels[2], iterations=1
         )
-        temp = cv2.morphologyEx(blue_mask, cv2.MORPH_CLOSE, kernel, iterations=1)
 
-        radius = 4
-        kernel = cv2.getStructuringElement(
-            cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
-        )  # adjust size for your balls
-        temp = cv2.dilate(temp, kernel, iterations=1)
+        temp = cv2.dilate(temp, self.kernels[3], iterations=1)
 
-        radius = 3
-        kernel = cv2.getStructuringElement(
-            cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
-        )
-        temp = cv2.morphologyEx(temp, cv2.MORPH_CLOSE, kernel, iterations=1)
-
-        # temp = np.zeros_like(blue_mask)
-        # contours, _ = cv2.findContours(
-        #     blue_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        # )
-        # if contours:
-        #     for contour in contours:
-        #         (cx, cy), radius = cv2.minEnclosingCircle(contour)
-        #         area = cv2.contourArea(contour)
-        #         if 40 < area < 600:
-        #             cv2.circle(temp, (int(cx), int(cy)), 10, (255, 255, 255), -1)
+        temp = cv2.morphologyEx(temp, cv2.MORPH_CLOSE, self.kernels[4], iterations=1)
 
         self.masks_cleaned["blue"] = temp.copy()
 
@@ -274,26 +217,23 @@ class GamePlayerChains:
                 thickness=-1,  # filled circle
             )
 
-        dist = cv2.distanceTransform(temp, cv2.DIST_L2, 5)
-        ball_centers = self.local_maxima(dist, min_distance=30)
+        # dist = cv2.distanceTransform(temp, cv2.DIST_L2, 5)
+        # ball_centers = self.local_maxima(dist, min_distance=30)
 
-        self.blobs["blue"] = self.blob_center_and_count(temp, ball_centers)
+        # self.blobs["blue"] = self.blob_center_and_count(temp, ball_centers)
 
     def GetYellow(self, hsv):
         lower_yellow = (20, 160, 200)
         upper_yellow = (30, 230, 255)
         mask_yellow = cv2.inRange(hsv, lower_yellow, upper_yellow)
 
-        kernel = np.ones((3, 3), np.uint8)
-        yellow_mask = cv2.morphologyEx(mask_yellow, cv2.MORPH_CLOSE, kernel)
+        yellow_mask = cv2.morphologyEx(mask_yellow, cv2.MORPH_CLOSE, self.kernels[1])
 
         self.masks_row["yellow"] = yellow_mask
 
-        radius = 1
-        kernel = cv2.getStructuringElement(
-            cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
+        temp = cv2.morphologyEx(
+            yellow_mask, cv2.MORPH_CLOSE, self.kernels[2], iterations=1
         )
-        temp = cv2.morphologyEx(yellow_mask, cv2.MORPH_CLOSE, kernel, iterations=1)
 
         if self.finish_pos:
             for fpos in self.finish_pos:
@@ -306,28 +246,9 @@ class GamePlayerChains:
                     thickness=-1,  # filled circle
                 )
 
-        radius = 4
-        kernel = cv2.getStructuringElement(
-            cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
-        )  # adjust size for your balls
-        temp = cv2.dilate(temp, kernel, iterations=1)
+        temp = cv2.dilate(temp, self.kernels[3], iterations=1)
 
-        radius = 3
-        kernel = cv2.getStructuringElement(
-            cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
-        )
-        temp = cv2.morphologyEx(temp, cv2.MORPH_CLOSE, kernel, iterations=1)
-
-        # temp = np.zeros_like(yellow_mask)
-        # contours, _ = cv2.findContours(
-        #     yellow_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        # )
-        # if contours:
-        #     for contour in contours:
-        #         (cx, cy), _ = cv2.minEnclosingCircle(contour)
-        #         area = cv2.contourArea(contour)
-        #         if 50 < area < 500:
-        #             cv2.circle(temp, (int(cx), int(cy)), 10, (255, 255, 255), -1)
+        temp = cv2.morphologyEx(temp, cv2.MORPH_CLOSE, self.kernels[4], iterations=1)
 
         self.masks_cleaned["yellow"] = temp.copy()
 
@@ -341,10 +262,10 @@ class GamePlayerChains:
                 thickness=-1,  # filled circle
             )
 
-        dist = cv2.distanceTransform(temp, cv2.DIST_L2, 5)
-        ball_centers = self.local_maxima(dist, min_distance=30)
+        # dist = cv2.distanceTransform(temp, cv2.DIST_L2, 5)
+        # ball_centers = self.local_maxima(dist, min_distance=30)
 
-        self.blobs["yellow"] = self.blob_center_and_count(temp, ball_centers)
+        # self.blobs["yellow"] = self.blob_center_and_count(temp, ball_centers)
 
     def process_colors(self, hsv):
         threads = [
@@ -443,11 +364,14 @@ class GamePlayerChains:
                 self.process_colors(hsv)
 
                 # self.GetAllBalls(frame)
+                # self.process_blobs()
 
                 detections = self.GetAllBalls(frame)
-
+                self.process_blobs()
                 all_chains = self.order_balls_by_finishes(detections)
                 self.all_chains = all_chains
+                # self.danger_centers = self.get_danger_centers(all_chains, limit=7)
+                # self.danger_keys = {self.center_key(c) for c in self.danger_centers}
                 for idx, chain in enumerate(all_chains):
                     for order, center in enumerate(chain):
                         cv2.putText(
@@ -537,34 +461,41 @@ class GamePlayerChains:
         cv2.destroyAllWindows()
 
     def GetAllBalls(self, frame):
-        if self.masks_row:
-            first_test = cv2.bitwise_or(self.masks_row["red"], self.masks_row["green"])
-            second_test = cv2.bitwise_or(
-                self.masks_row["blue"], self.masks_row["yellow"]
+        if self.masks_cleaned:
+            # first_test = cv2.bitwise_or(self.masks_row["red"], self.masks_row["green"])
+            # second_test = cv2.bitwise_or(
+            #     self.masks_row["blue"], self.masks_row["yellow"]
+            # )
+            # all_balls = cv2.bitwise_or(first_test, second_test)
+            first_test2 = cv2.bitwise_or(
+                self.masks_cleaned["red"], self.masks_cleaned["green"]
             )
-            all_balls = cv2.bitwise_or(first_test, second_test)
+            second_test2 = cv2.bitwise_or(
+                self.masks_cleaned["blue"], self.masks_cleaned["yellow"]
+            )
+            all_balls = cv2.bitwise_or(first_test2, second_test2)
 
-            radius = 1
-            kernel = cv2.getStructuringElement(
-                cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
-            )
-            all_balls = cv2.morphologyEx(
-                all_balls, cv2.MORPH_CLOSE, kernel, iterations=1
-            )
+            # radius = 1
+            # kernel = cv2.getStructuringElement(
+            #     cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
+            # )
+            # all_balls = cv2.morphologyEx(
+            #     all_balls, cv2.MORPH_CLOSE, kernel, iterations=1
+            # )
 
-            radius = 4
-            kernel = cv2.getStructuringElement(
-                cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
-            )  # adjust size for your balls
-            all_balls = cv2.dilate(all_balls, kernel, iterations=1)
+            # radius = 4
+            # kernel = cv2.getStructuringElement(
+            #     cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
+            # )  # adjust size for your balls
+            # all_balls = cv2.dilate(all_balls, kernel, iterations=1)
 
-            radius = 3
-            kernel = cv2.getStructuringElement(
-                cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
-            )
-            all_balls = cv2.morphologyEx(
-                all_balls, cv2.MORPH_CLOSE, kernel, iterations=1
-            )
+            # radius = 3
+            # kernel = cv2.getStructuringElement(
+            #     cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
+            # )
+            # all_balls = cv2.morphologyEx(
+            #     all_balls, cv2.MORPH_CLOSE, kernel, iterations=1
+            # )
 
             if self.frog_pos:
                 (frx, fry), frr = self.frog_pos
@@ -600,11 +531,61 @@ class GamePlayerChains:
                 )
 
             self.all_balls_mask = all_balls
+            self.balls_centers = ball_centers
             # self.test_mask = test_balls
 
             cv2.imshow("all balls", all_balls)
             # cv2.imshow("test balls", test_balls)
             return ball_centers
+
+    def RedBlobs(self):
+        red_mask = cv2.bitwise_and(self.all_balls_mask, self.masks_cleaned["red"])
+        red_centers = []
+        for c in self.balls_centers:
+            x, y = int(c[0]), int(c[1])
+            if red_mask[y, x] > 0:
+                red_centers.append(c)
+        self.blobs["red"] = self.blob_center_and_count(red_mask, red_centers)
+
+    def GreenBlobs(self):
+        green_mask = cv2.bitwise_and(self.all_balls_mask, self.masks_cleaned["green"])
+        green_centers = []
+        for c in self.balls_centers:
+            x, y = int(c[0]), int(c[1])
+            if green_mask[y, x] > 0:
+                green_centers.append(c)
+        self.blobs["green"] = self.blob_center_and_count(green_mask, green_centers)
+
+    def BlueBlobs(self):
+        blue_mask = cv2.bitwise_and(self.all_balls_mask, self.masks_cleaned["blue"])
+        blue_centers = []
+        for c in self.balls_centers:
+            x, y = int(c[0]), int(c[1])
+            if blue_mask[y, x] > 0:
+                blue_centers.append(c)
+        self.blobs["blue"] = self.blob_center_and_count(blue_mask, blue_centers)
+
+    def YellowBlobs(self):
+        yellow_mask = cv2.bitwise_and(self.all_balls_mask, self.masks_cleaned["yellow"])
+        yellow_centers = []
+        for c in self.balls_centers:
+            x, y = int(c[0]), int(c[1])
+            if yellow_mask[y, x] > 0:
+                yellow_centers.append(c)
+        self.blobs["yellow"] = self.blob_center_and_count(yellow_mask, yellow_centers)
+
+    def process_blobs(self):
+        threads = [
+            threading.Thread(target=self.RedBlobs),
+            threading.Thread(target=self.GreenBlobs),
+            threading.Thread(target=self.BlueBlobs),
+            threading.Thread(target=self.YellowBlobs),
+        ]
+
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
 
     def GetCurrentPlayBall(self):
         if self.masks_cleaned and self.frog_pos:
@@ -726,9 +707,6 @@ class GamePlayerChains:
         return blob_data
 
     def choose_ball_play(self, balls_centers):
-        if not self.current_ball:
-            return
-
         valid_blobs = self.blobs.get(self.current_ball, [])
         if not valid_blobs:
             return
@@ -748,6 +726,10 @@ class GamePlayerChains:
 
             if count >= 2 and left_color is not None and left_color == right_color:
                 score += 10  # strong priority boost
+
+            # # --- DANGER ZONE BOOST ---
+            # if self.blob_in_danger_zone(in_centers):
+            #     score += 3
 
             # --- PATH CLEAR CHECK ---
             filtered_centers = [
@@ -790,8 +772,6 @@ class GamePlayerChains:
         # Reset shooting cooldown
         self.can_shoot = False
         self.can_shoot_time = time.time()
-
-        time.sleep(0.1)
 
     def is_path_clear(self, target_center, all_centers, radius=20):
         """
@@ -847,7 +827,7 @@ class GamePlayerChains:
             if time.time() - self.can_shoot_time >= self.can_shoot_duration:
                 self.can_shoot = True
 
-    def find_blob_range_in_chain(self, blob_centers, chain, max_dist=25):
+    def find_blob_range_in_chain(self, blob_centers, chain, max_dist=30):
         if not chain or not blob_centers:
             return None
         indices = []
@@ -893,7 +873,7 @@ class GamePlayerChains:
         """
         x, y = int(center[0]), int(center[1])
 
-        for color, mask in self.masks_row.items():
+        for color, mask in self.masks_cleaned.items():
             # Defensive bounds check
             if y < 0 or y >= mask.shape[0] or x < 0 or x >= mask.shape[1]:
                 continue
@@ -902,6 +882,29 @@ class GamePlayerChains:
                 return color
 
         return None
+
+    def get_danger_centers(self, chains, limit=7):
+        """
+        Returns a set of ball centers that are within the first `limit`
+        balls of each chain (closest to finish).
+        """
+        danger = []
+
+        for chain in chains:
+            if not chain:
+                continue
+            danger.extend(chain[:limit])
+
+        return danger
+
+    def center_key(self, c, q=5):
+        return (int(c[0] // q), int(c[1] // q))
+
+    def blob_in_danger_zone(self, blob_centers):
+        for bc in blob_centers:
+            if self.center_key(bc) in self.danger_keys:
+                return True
+        return False
 
     # def order_balls_nearest(self, centers, start_point):
     #     centers = centers.copy()
