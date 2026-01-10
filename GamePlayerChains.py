@@ -447,6 +447,7 @@ class GamePlayerChains:
                 detections = self.GetAllBalls(frame)
 
                 all_chains = self.order_balls_by_finishes(detections)
+                self.all_chains = all_chains
                 for idx, chain in enumerate(all_chains):
                     for order, center in enumerate(chain):
                         cv2.putText(
@@ -725,51 +726,72 @@ class GamePlayerChains:
         return blob_data
 
     def choose_ball_play(self, balls_centers):
-        if self.current_ball:
-            valid_blobs = self.blobs[self.current_ball]
-            if valid_blobs:
-                valid_blobs.sort(key=lambda x: x[1], reverse=True)
-                for blob in valid_blobs:
-                    target_center, _, in_centers = blob
+        if not self.current_ball:
+            return
 
-                    filtered_centers = []
-                    for c in balls_centers:
-                        if not any(np.allclose(c, ic, atol=5.0) for ic in in_centers):
-                            filtered_centers.append(c)
+        valid_blobs = self.blobs.get(self.current_ball, [])
+        if not valid_blobs:
+            return
 
-                    clear = self.is_path_clear(target_center, filtered_centers)
+        scored_blobs = []
 
-                    if clear:
-                        if self.can_shoot:
-                            print(f"🔥 Clear shot! {self.current_ball}")
-                            win_x = target_center[0]
-                            win_y = target_center[1]
+        for blob in valid_blobs:
+            target_center, count, in_centers = blob
 
-                            # Convert window-relative to screen coordinates
-                            screen_x = self.window.left + win_x
-                            screen_y = self.window.top + win_y
+            # --- BASE SCORE ---
+            score = count
 
-                            # Move mouse
-                            pyautogui.moveTo(screen_x, screen_y, duration=0.1)
+            # --- BRIDGE-MERGE BOOST ---
+            left_color, right_color = self.get_blob_side_colors(
+                in_centers, self.all_chains
+            )
 
-                            # Click
-                            pyautogui.click()
+            if count >= 2 and left_color is not None and left_color == right_color:
+                score += 10  # strong priority boost
 
-                            # Reset current_ball
-                            self.current_ball = self.second_color
-                            self.second_color = None
+            # --- PATH CLEAR CHECK ---
+            filtered_centers = [
+                c
+                for c in balls_centers
+                if not any(np.allclose(c, ic, atol=5.0) for ic in in_centers)
+            ]
 
-                            # reset shooting
-                            self.can_shoot = False
-                            self.can_shoot_time = time.time()
+            if not self.is_path_clear(target_center, filtered_centers):
+                continue
 
-                            # Small delay
-                            time.sleep(0.1)
-                    else:
-                        continue
-                        # print(f"target_center: {target_center}, score: {score}")
-                        # print("⛔ Shot blocked")
-            # print("finised call")
+            scored_blobs.append((score, blob))
+
+        if not scored_blobs:
+            return
+
+        # --- PICK BEST SCORING SHOT ---
+        scored_blobs.sort(key=lambda x: x[0], reverse=True)
+        best_score, best_blob = scored_blobs[0]
+
+        target_center, _, _ = best_blob
+
+        if not self.can_shoot:
+            return
+
+        print(f"🔥 Clear shot! {self.current_ball} | score={best_score}")
+
+        win_x, win_y = target_center
+
+        screen_x = self.window.left + win_x
+        screen_y = self.window.top + win_y
+
+        pyautogui.moveTo(screen_x, screen_y, duration=0.1)
+        pyautogui.click()
+
+        # Rotate balls
+        self.current_ball = self.second_color
+        self.second_color = None
+
+        # Reset shooting cooldown
+        self.can_shoot = False
+        self.can_shoot_time = time.time()
+
+        time.sleep(0.1)
 
     def is_path_clear(self, target_center, all_centers, radius=20):
         """
@@ -824,6 +846,62 @@ class GamePlayerChains:
         if not self.can_shoot:
             if time.time() - self.can_shoot_time >= self.can_shoot_duration:
                 self.can_shoot = True
+
+    def find_blob_range_in_chain(self, blob_centers, chain, max_dist=25):
+        if not chain or not blob_centers:
+            return None
+        indices = []
+
+        for bc in blob_centers:
+            dists = [np.linalg.norm(c - bc) for c in chain]
+            if not dists:
+                continue
+
+            idx = np.argmin(dists)
+            if dists[idx] <= max_dist:
+                indices.append(idx)
+
+        if not indices:
+            return None
+
+        return min(indices), max(indices)
+
+    def get_blob_side_colors(self, blob_centers, chains):
+        for chain in chains:
+            rng = self.find_blob_range_in_chain(blob_centers, chain)
+            if rng is None:
+                continue
+
+            start_idx, end_idx = rng
+
+            left_color = None
+            right_color = None
+
+            if start_idx > 0:
+                left_color = self.get_ball_color_at(chain[start_idx - 1])
+            if end_idx < len(chain) - 1:
+                right_color = self.get_ball_color_at(chain[end_idx + 1])
+
+            return left_color, right_color
+
+        return None, None
+
+    def get_ball_color_at(self, center):
+        """
+        Returns the color name ('red', 'green', 'blue', 'yellow')
+        of the ball at the given center position.
+        """
+        x, y = int(center[0]), int(center[1])
+
+        for color, mask in self.masks_row.items():
+            # Defensive bounds check
+            if y < 0 or y >= mask.shape[0] or x < 0 or x >= mask.shape[1]:
+                continue
+
+            if mask[y, x] > 0:
+                return color
+
+        return None
 
     # def order_balls_nearest(self, centers, start_point):
     #     centers = centers.copy()
