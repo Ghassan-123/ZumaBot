@@ -29,7 +29,7 @@ class GamePlayerChains:
         self.second_color = None
 
         self.all_balls_mask = None
-        self.test_mask = None
+        self.balls_centers = []
 
         self.blobs = {}
 
@@ -37,8 +37,6 @@ class GamePlayerChains:
         self.can_shoot = False
         self.can_shoot_time = 0
         self.can_shoot_duration = 2  # seconds
-
-        self.balls_centers = []
 
         self.kernels = {
             1: np.ones((3, 3), np.uint8),
@@ -137,22 +135,7 @@ class GamePlayerChains:
 
         temp = cv2.morphologyEx(temp, cv2.MORPH_CLOSE, self.kernels[4], iterations=1)
 
-        self.masks_cleaned["red"] = temp.copy()
-
-        if self.frog_pos:
-            (frx, fry), frr = self.frog_pos
-            cv2.circle(
-                temp,
-                center=(int(frx), int(fry)),
-                radius=int(frr),
-                color=0,
-                thickness=-1,  # filled circle
-            )
-
-        # dist = cv2.distanceTransform(temp, cv2.DIST_L2, 5)
-        # ball_centers = self.local_maxima(dist, min_distance=30)
-
-        # self.blobs["red"] = self.blob_center_and_count(temp, ball_centers)
+        self.masks_cleaned["red"] = temp
 
     def GetGreen(self, hsv):
         lower_green = (50, 160, 165)
@@ -171,22 +154,7 @@ class GamePlayerChains:
 
         temp = cv2.morphologyEx(temp, cv2.MORPH_CLOSE, self.kernels[4], iterations=1)
 
-        self.masks_cleaned["green"] = temp.copy()
-
-        if self.frog_pos:
-            (frx, fry), frr = self.frog_pos
-            cv2.circle(
-                temp,
-                center=(int(frx), int(fry)),
-                radius=int(frr),
-                color=0,
-                thickness=-1,  # filled circle
-            )
-
-        # dist = cv2.distanceTransform(temp, cv2.DIST_L2, 5)
-        # ball_centers = self.local_maxima(dist, min_distance=30)
-
-        # self.blobs["green"] = self.blob_center_and_count(temp, ball_centers)
+        self.masks_cleaned["green"] = temp
 
     def GetBlue(self, hsv):
         lower_blue = (95, 180, 190)
@@ -205,22 +173,7 @@ class GamePlayerChains:
 
         temp = cv2.morphologyEx(temp, cv2.MORPH_CLOSE, self.kernels[4], iterations=1)
 
-        self.masks_cleaned["blue"] = temp.copy()
-
-        if self.frog_pos:
-            (frx, fry), frr = self.frog_pos
-            cv2.circle(
-                temp,
-                center=(int(frx), int(fry)),
-                radius=int(frr),
-                color=0,
-                thickness=-1,  # filled circle
-            )
-
-        # dist = cv2.distanceTransform(temp, cv2.DIST_L2, 5)
-        # ball_centers = self.local_maxima(dist, min_distance=30)
-
-        # self.blobs["blue"] = self.blob_center_and_count(temp, ball_centers)
+        self.masks_cleaned["blue"] = temp
 
     def GetYellow(self, hsv):
         lower_yellow = (20, 160, 200)
@@ -250,22 +203,7 @@ class GamePlayerChains:
 
         temp = cv2.morphologyEx(temp, cv2.MORPH_CLOSE, self.kernels[4], iterations=1)
 
-        self.masks_cleaned["yellow"] = temp.copy()
-
-        if self.frog_pos:
-            (frx, fry), frr = self.frog_pos
-            cv2.circle(
-                temp,
-                center=(int(frx), int(fry)),
-                radius=int(frr),
-                color=0,
-                thickness=-1,  # filled circle
-            )
-
-        # dist = cv2.distanceTransform(temp, cv2.DIST_L2, 5)
-        # ball_centers = self.local_maxima(dist, min_distance=30)
-
-        # self.blobs["yellow"] = self.blob_center_and_count(temp, ball_centers)
+        self.masks_cleaned["yellow"] = temp
 
     def process_colors(self, hsv):
         threads = [
@@ -362,9 +300,6 @@ class GamePlayerChains:
                         2,
                     )  # Center dot
                 self.process_colors(hsv)
-
-                # self.GetAllBalls(frame)
-                # self.process_blobs()
 
                 detections = self.GetAllBalls(frame)
                 self.process_blobs()
