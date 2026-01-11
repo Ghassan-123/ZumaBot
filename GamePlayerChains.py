@@ -47,6 +47,10 @@ class GamePlayerChains:
 
         self.frame_id = 0
 
+        # print("cv2 Threads", cv2.getNumThreads())
+        # cv2.setNumThreads(0)
+        # cv2.setUseOptimized(True)
+
     def GetFinishPos(self, hsv, area_threshold=4800):
         if not self.finish_pos:
             finish_mask = cv2.inRange(
@@ -225,171 +229,6 @@ class GamePlayerChains:
     #         t.start()
     #     for t in threads:
     #         t.join()
-
-    def RunLoop(self):
-        #  Start timer
-        prev_time = time.time()
-
-        # Get game window
-        self.window = self.WindowCapturer.GetWindow("Zuma Deluxe 1.1.0.0")
-
-        def on_mouse(event, x, y, flags, param):
-            if event == cv2.EVENT_LBUTTONDOWN:
-                print((y, x))
-                print(hsv[y, x])
-
-        while True:
-            # Get current frame
-            frame = self.WindowCapturer.CaptureWindow(self.window)
-            self.frame_id += 1
-
-            # Calculate FPS
-            curr_time = time.time()
-            fps = 1 / (curr_time - prev_time)
-            prev_time = curr_time
-
-            # Draw FPS
-            cv2.putText(
-                frame,
-                f"FPS: {int(fps)}",
-                (20, 40),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                1,
-                (0, 255, 0),
-                2,
-            )
-
-            hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-            if self.aspect_ratio == 1.6:
-                # cut top
-                hsv[:64, :] = (0, 0, 0)
-                hsv[:80, :112] = (0, 0, 0)
-                hsv[:80, -112:] = (0, 0, 0)
-
-                # edges (left, right, bottom)
-                hsv[:, :10] = (0, 0, 0)
-                hsv[:, -10:] = (0, 0, 0)
-                hsv[-10:, :] = (0, 0, 0)
-            else:
-                # cut top
-                hsv[:50, :] = (0, 0, 0)
-                hsv[:60, :100] = (0, 0, 0)
-                hsv[:60, 100:] = (0, 0, 0)
-
-                # edges (left, right, bottom)
-                hsv[:, :10] = (0, 0, 0)
-                hsv[:, -10:] = (0, 0, 0)
-                hsv[-10:, :] = (0, 0, 0)
-
-            if not self.start and keyboard.is_pressed("s"):
-                self.start = True
-
-            if self.start:
-                finishPos = self.GetFinishPos(hsv)
-                frogPos = self.GetFrogPos(hsv)
-
-                if finishPos is not None:
-                    for pos in finishPos:
-                        (cx, cy), radius = pos
-                        cv2.circle(
-                            frame,
-                            (int(cx), int(cy)),
-                            int(radius),
-                            (255, 255, 255),
-                            2,
-                        )  # Center dot
-
-                if frogPos is not None:
-                    (cx, cy), radius = frogPos
-                    cv2.circle(
-                        frame,
-                        (int(cx), int(cy)),
-                        int(radius),
-                        (255, 255, 255),
-                        2,
-                    )  # Center dot
-                self.process_colors(hsv)
-
-                if self.frame_id % 3 == 0:
-                    self.frame_id %= 3
-                    detections = self.GetAllBalls(frame)
-                    self.process_blobs()
-
-                    all_chains = self.order_balls_by_finishes(detections)
-                    self.all_chains = all_chains
-                    # self.danger_centers = self.get_danger_centers(all_chains, limit=7)
-                    # self.danger_keys = {self.center_key(c) for c in self.danger_centers}
-                    for idx, chain in enumerate(all_chains):
-                        for order, center in enumerate(chain):
-                            cv2.putText(
-                                frame,
-                                f"C{idx}:{order}",
-                                (int(center[0]) + 6, int(center[1]) - 6),
-                                cv2.FONT_HERSHEY_SIMPLEX,
-                                0.25,
-                                (0, 255, 255),
-                                2,
-                            )
-
-                    for key, val in self.blobs.items():
-                        if key == "red":
-                            color = (0, 0, 255)
-                        elif key == "green":
-                            color = (0, 255, 0)
-                        elif key == "blue":
-                            color = (255, 0, 0)
-                        elif key == "yellow":
-                            color = (0, 255, 255)
-                        else:
-                            color = (255, 255, 255)
-
-                        for center, count, _ in val:
-                            cv2.putText(
-                                frame,
-                                f"{count}",
-                                (int(center[0]) + 12, int(center[1]) - 12),
-                                cv2.FONT_HERSHEY_SIMPLEX,
-                                0.5,
-                                color,
-                                2,
-                            )
-
-                    self.GetCurrentPlayBall()
-
-                    self.choose_ball_play(detections)
-                    self.reset_shooting()
-
-                # print(f"current_ball: {self.current_ball}")
-                # print(f"second_ball: {self.second_color}")
-
-                # cv2.imshow("Red", self.masks_cleaned["red"])
-                # cv2.imshow("Green", self.masks_cleaned["green"])
-                # cv2.imshow("Blue", self.masks_cleaned["blue"])
-                # cv2.imshow("Yellow", self.masks_cleaned["yellow"])
-
-            # Show Frame
-            cv2.imshow("Test", frame)
-            cv2.imshow("Screen Capture", hsv)
-
-            # self.DetectFrogSift(frame)
-            # self.DetectFrogSurf(frame)
-            # self.DetectFrogOrb(frame)
-
-            if keyboard.is_pressed("r"):
-                self.start_pos = None
-                self.finish_pos = []
-                self.frog_pos = None
-
-            if keyboard.is_pressed("e"):
-                sys.exit(0)
-
-            cv2.setMouseCallback("Screen Capture", on_mouse)
-
-            # Exit on 'q'
-            if cv2.waitKey(1) & 0xFF == ord("q"):
-                break
-
-        cv2.destroyAllWindows()
 
     def GetAllBalls(self, frame):
         if self.masks_cleaned:
@@ -797,6 +636,171 @@ class GamePlayerChains:
                 return color
 
         return None
+
+    def RunLoop(self):
+        #  Start timer
+        prev_time = time.time()
+
+        # Get game window
+        self.window = self.WindowCapturer.GetWindow("Zuma Deluxe 1.1.0.0")
+
+        def on_mouse(event, x, y, flags, param):
+            if event == cv2.EVENT_LBUTTONDOWN:
+                print((y, x))
+                print(hsv[y, x])
+
+        while True:
+            # Get current frame
+            frame = self.WindowCapturer.CaptureWindow(self.window)
+            self.frame_id += 1
+
+            # Calculate FPS
+            curr_time = time.time()
+            fps = 1 / (curr_time - prev_time)
+            prev_time = curr_time
+
+            # Draw FPS
+            cv2.putText(
+                frame,
+                f"FPS: {int(fps)}",
+                (20, 40),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1,
+                (0, 255, 0),
+                2,
+            )
+
+            hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+            if self.aspect_ratio == 1.6:
+                # cut top
+                hsv[:64, :] = (0, 0, 0)
+                hsv[:80, :112] = (0, 0, 0)
+                hsv[:80, -112:] = (0, 0, 0)
+
+                # edges (left, right, bottom)
+                hsv[:, :10] = (0, 0, 0)
+                hsv[:, -10:] = (0, 0, 0)
+                hsv[-10:, :] = (0, 0, 0)
+            else:
+                # cut top
+                hsv[:50, :] = (0, 0, 0)
+                hsv[:60, :100] = (0, 0, 0)
+                hsv[:60, 100:] = (0, 0, 0)
+
+                # edges (left, right, bottom)
+                hsv[:, :10] = (0, 0, 0)
+                hsv[:, -10:] = (0, 0, 0)
+                hsv[-10:, :] = (0, 0, 0)
+
+            if not self.start and keyboard.is_pressed("s"):
+                self.start = True
+
+            if self.start:
+                finishPos = self.GetFinishPos(hsv)
+                frogPos = self.GetFrogPos(hsv)
+
+                if finishPos is not None:
+                    for pos in finishPos:
+                        (cx, cy), radius = pos
+                        cv2.circle(
+                            frame,
+                            (int(cx), int(cy)),
+                            int(radius),
+                            (255, 255, 255),
+                            2,
+                        )  # Center dot
+
+                if frogPos is not None:
+                    (cx, cy), radius = frogPos
+                    cv2.circle(
+                        frame,
+                        (int(cx), int(cy)),
+                        int(radius),
+                        (255, 255, 255),
+                        2,
+                    )  # Center dot
+                self.process_colors(hsv)
+
+                if self.frame_id % 3 == 0:
+                    self.frame_id %= 3
+                    detections = self.GetAllBalls(frame)
+                    self.process_blobs()
+
+                    all_chains = self.order_balls_by_finishes(detections)
+                    self.all_chains = all_chains
+                    # self.danger_centers = self.get_danger_centers(all_chains, limit=7)
+                    # self.danger_keys = {self.center_key(c) for c in self.danger_centers}
+                    for idx, chain in enumerate(all_chains):
+                        for order, center in enumerate(chain):
+                            cv2.putText(
+                                frame,
+                                f"C{idx}:{order}",
+                                (int(center[0]) + 6, int(center[1]) - 6),
+                                cv2.FONT_HERSHEY_SIMPLEX,
+                                0.25,
+                                (0, 255, 255),
+                                2,
+                            )
+
+                    for key, val in self.blobs.items():
+                        if key == "red":
+                            color = (0, 0, 255)
+                        elif key == "green":
+                            color = (0, 255, 0)
+                        elif key == "blue":
+                            color = (255, 0, 0)
+                        elif key == "yellow":
+                            color = (0, 255, 255)
+                        else:
+                            color = (255, 255, 255)
+
+                        for center, count, _ in val:
+                            cv2.putText(
+                                frame,
+                                f"{count}",
+                                (int(center[0]) + 12, int(center[1]) - 12),
+                                cv2.FONT_HERSHEY_SIMPLEX,
+                                0.5,
+                                color,
+                                2,
+                            )
+
+                    self.GetCurrentPlayBall()
+
+                    self.choose_ball_play(detections)
+                    self.reset_shooting()
+
+                # print(f"current_ball: {self.current_ball}")
+                # print(f"second_ball: {self.second_color}")
+
+                # cv2.imshow("Red", self.masks_cleaned["red"])
+                # cv2.imshow("Green", self.masks_cleaned["green"])
+                # cv2.imshow("Blue", self.masks_cleaned["blue"])
+                # cv2.imshow("Yellow", self.masks_cleaned["yellow"])
+
+            # Show Frame
+            cv2.imshow("Test", frame)
+            cv2.imshow("Screen Capture", hsv)
+
+            # self.DetectFrogSift(frame)
+            # self.DetectFrogSurf(frame)
+            # self.DetectFrogOrb(frame)
+
+            if keyboard.is_pressed("r"):
+                self.start_pos = None
+                self.finish_pos = []
+                self.frog_pos = None
+
+            if keyboard.is_pressed("e"):
+                sys.exit(0)
+
+            cv2.setMouseCallback("Screen Capture", on_mouse)
+
+            # Exit on 'q'
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                break
+
+        cv2.destroyAllWindows()
 
     # def get_danger_centers(self, chains, limit=7):
     #     """
