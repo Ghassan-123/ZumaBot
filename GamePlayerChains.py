@@ -231,7 +231,7 @@ class GamePlayerChains:
         prev_time = time.time()
 
         # Get game window
-        self.window = self.WindowCapturer.GetWindow("Zuma Deluxe 1.1.0.0")
+        self.window = self.WindowCapturer.WaitForWindow("Zuma Deluxe 1.1.0.0", interval_seconds=0.1)
 
         def on_mouse(event, x, y, flags, param):
             if event == cv2.EVENT_LBUTTONDOWN:
