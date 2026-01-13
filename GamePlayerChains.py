@@ -36,7 +36,7 @@ class GamePlayerChains:
         self.start = False
         self.can_shoot = False
         self.can_shoot_time = 0
-        self.can_shoot_duration = 1.8  # seconds
+        self.can_shoot_duration = 1.5  # seconds
 
         self.kernels = {
             1: np.ones((3, 3), np.uint8),
@@ -262,7 +262,7 @@ class GamePlayerChains:
             hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
             if self.aspect_ratio == 1.6:
                 # cut top
-                hsv[:64, :] = (0, 0, 0)
+                hsv[:72, :] = (0, 0, 0)
                 hsv[:80, :112] = (0, 0, 0)
                 hsv[:80, -112:] = (0, 0, 0)
 
