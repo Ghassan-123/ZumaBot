@@ -21,7 +21,7 @@ class GamePlayerChains:
         self.finish_pos = []
         self.frog_pos = None
         self.WindowCapturer = WindowCapturer()
-        self.frog_template = cv2.imread("frog_template.png")
+        # self.frog_template = cv2.imread("frog_template.png")
 
         self.masks_row = {}
         self.masks_cleaned = {}
@@ -226,171 +226,6 @@ class GamePlayerChains:
     #     for t in threads:
     #         t.join()
 
-    def RunLoop(self):
-        #  Start timer
-        prev_time = time.time()
-
-        # Get game window
-        self.window = self.WindowCapturer.WaitForWindow("Zuma Deluxe 1.1.0.0", interval_seconds=0.1)
-
-        def on_mouse(event, x, y, flags, param):
-            if event == cv2.EVENT_LBUTTONDOWN:
-                print((y, x))
-                print(hsv[y, x])
-
-        while True:
-            # Get current frame
-            frame = self.WindowCapturer.CaptureWindow(self.window)
-            self.frame_id += 1
-
-            # Calculate FPS
-            curr_time = time.time()
-            fps = 1 / (curr_time - prev_time)
-            prev_time = curr_time
-
-            # Draw FPS
-            cv2.putText(
-                frame,
-                f"FPS: {int(fps)}",
-                (20, 40),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                1,
-                (0, 255, 0),
-                2,
-            )
-
-            hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-            if self.aspect_ratio == 1.6:
-                # cut top
-                hsv[:72, :] = (0, 0, 0)
-                hsv[:80, :112] = (0, 0, 0)
-                hsv[:80, -112:] = (0, 0, 0)
-
-                # edges (left, right, bottom)
-                hsv[:, :10] = (0, 0, 0)
-                hsv[:, -10:] = (0, 0, 0)
-                hsv[-10:, :] = (0, 0, 0)
-            else:
-                # cut top
-                hsv[:50, :] = (0, 0, 0)
-                hsv[:60, :100] = (0, 0, 0)
-                hsv[:60, 100:] = (0, 0, 0)
-
-                # edges (left, right, bottom)
-                hsv[:, :10] = (0, 0, 0)
-                hsv[:, -10:] = (0, 0, 0)
-                hsv[-10:, :] = (0, 0, 0)
-
-            if not self.start and keyboard.is_pressed("s"):
-                self.start = True
-
-            if self.start:
-                finishPos = self.GetFinishPos(hsv)
-                frogPos = self.GetFrogPos(hsv)
-
-                if finishPos is not None:
-                    for pos in finishPos:
-                        (cx, cy), radius = pos
-                        cv2.circle(
-                            frame,
-                            (int(cx), int(cy)),
-                            int(radius),
-                            (255, 255, 255),
-                            2,
-                        )  # Center dot
-
-                if frogPos is not None:
-                    (cx, cy), radius = frogPos
-                    cv2.circle(
-                        frame,
-                        (int(cx), int(cy)),
-                        int(radius),
-                        (255, 255, 255),
-                        2,
-                    )  # Center dot
-                self.process_colors(hsv)
-
-                if self.frame_id % 3 == 0:
-                    self.frame_id %= 3
-                    detections = self.GetAllBalls(frame)
-                    self.process_blobs()
-
-                    all_chains = self.order_balls_by_finishes(detections)
-                    self.all_chains = all_chains
-                    # self.danger_centers = self.get_danger_centers(all_chains, limit=7)
-                    # self.danger_keys = {self.center_key(c) for c in self.danger_centers}
-                    for idx, chain in enumerate(all_chains):
-                        for order, center in enumerate(chain):
-                            cv2.putText(
-                                frame,
-                                f"C{idx}:{order}",
-                                (int(center[0]) + 6, int(center[1]) - 6),
-                                cv2.FONT_HERSHEY_SIMPLEX,
-                                0.25,
-                                (0, 255, 255),
-                                2,
-                            )
-
-                    for key, val in self.blobs.items():
-                        if key == "red":
-                            color = (0, 0, 255)
-                        elif key == "green":
-                            color = (0, 255, 0)
-                        elif key == "blue":
-                            color = (255, 0, 0)
-                        elif key == "yellow":
-                            color = (0, 255, 255)
-                        else:
-                            color = (255, 255, 255)
-
-                        for center, count, _ in val:
-                            cv2.putText(
-                                frame,
-                                f"{count}",
-                                (int(center[0]) + 12, int(center[1]) - 12),
-                                cv2.FONT_HERSHEY_SIMPLEX,
-                                0.5,
-                                color,
-                                2,
-                            )
-
-                    self.GetCurrentPlayBall()
-
-                    self.choose_ball_play(detections)
-                    self.reset_shooting()
-
-                # print(f"current_ball: {self.current_ball}")
-                # print(f"second_ball: {self.second_color}")
-
-                # cv2.imshow("Red", self.masks_cleaned["red"])
-                # cv2.imshow("Green", self.masks_cleaned["green"])
-                # cv2.imshow("Blue", self.masks_cleaned["blue"])
-                # cv2.imshow("Yellow", self.masks_cleaned["yellow"])
-
-            # Show Frame
-            cv2.imshow("Test", frame)
-            cv2.imshow("Screen Capture", hsv)
-
-            # self.DetectFrogSift(frame)
-            # self.DetectFrogSurf(frame)
-            # self.DetectFrogOrb(frame)
-
-            if keyboard.is_pressed("r"):
-                self.start_pos = None
-                self.finish_pos = []
-                self.frog_pos = None
-
-            if keyboard.is_pressed("e"):
-                sys.exit(0)
-
-            cv2.setMouseCallback("Screen Capture", on_mouse)
-
-            # Exit on 'q'
-            if cv2.waitKey(1) & 0xFF == ord("q"):
-                break
-
-        cv2.destroyAllWindows()
-
     def GetAllBalls(self, frame):
         if self.masks_cleaned:
             first_test = cv2.bitwise_or(
@@ -554,10 +389,6 @@ class GamePlayerChains:
         return centers
 
     def order_balls_by_finishes(self, detections):
-        """
-        detections: list of ball centers (np.array)
-        returns: list of chains (each chain is a list of centers)
-        """
         if not self.finish_pos:
             return []
 
@@ -596,13 +427,6 @@ class GamePlayerChains:
         return chains
 
     def blob_center_and_count(self, mask, centers):
-        """
-        mask: binary mask of all balls (single-channel, 0 or 255)
-        centers: list of np.array([x, y]) detected from distance transform
-        returns: list of tuples [(center, count), ...] per blob
-                center: np.array([x, y]) representing the mean of centers in blob
-                count: number of centers in that blob
-        """
         num_labels, labels = cv2.connectedComponents(mask)
         blob_data = []
 
@@ -618,7 +442,6 @@ class GamePlayerChains:
             else:
                 pass
                 # No detected centers inside this blob
-                # Optionally, you can use the blob's centroid from connectedComponents stats
                 # blob_data.append((None, 0))
 
         return blob_data
@@ -687,13 +510,6 @@ class GamePlayerChains:
         self.can_shoot_time = time.time()
 
     def is_path_clear(self, target_center, all_centers, radius=20):
-        """
-        Checks if the path from the frog to target is blocked by any other balls.
-
-        target_center: np.array([x, y])
-        all_blob_centers: list of np.array([x, y])
-        radius: allowed sideways tolerance (how far a ball can be from the line)
-        """
         if self.frog_pos:
             (fx, fy), _ = self.frog_pos
             frog = np.array([fx, fy], dtype=np.float32)
@@ -782,10 +598,6 @@ class GamePlayerChains:
         return None, None
 
     def get_ball_color_at(self, center):
-        """
-        Returns the color name ('red', 'green', 'blue', 'yellow')
-        of the ball at the given center position.
-        """
         x, y = int(center[0]), int(center[1])
 
         for color, mask in self.masks_cleaned.items():
@@ -798,194 +610,169 @@ class GamePlayerChains:
 
         return None
 
-    # def get_danger_centers(self, chains, limit=7):
-    #     """
-    #     Returns a set of ball centers that are within the first `limit`
-    #     balls of each chain (closest to finish).
-    #     """
-    #     danger = []
+    def RunLoop(self):
+        #  Start timer
+        prev_time = time.time()
 
-    #     for chain in chains:
-    #         if not chain:
-    #             continue
-    #         danger.extend(chain[:limit])
+        # Get game window
+        self.window = self.WindowCapturer.WaitForWindow(
+            "Zuma Deluxe 1.1.0.0", interval_seconds=0.1
+        )
 
-    #     return danger
+        def on_mouse(event, x, y, flags, param):
+            if event == cv2.EVENT_LBUTTONDOWN:
+                print((y, x))
+                print(hsv[y, x])
 
-    # def center_key(self, c, q=5):
-    #     return (int(c[0] // q), int(c[1] // q))
+        while True:
+            # Get current frame
+            frame = self.WindowCapturer.CaptureWindow(self.window)
+            self.frame_id += 1
 
-    # def blob_in_danger_zone(self, blob_centers):
-    #     for bc in blob_centers:
-    #         if self.center_key(bc) in self.danger_keys:
-    #             return True
-    #     return False
+            # Calculate FPS
+            curr_time = time.time()
+            fps = 1 / (curr_time - prev_time)
+            prev_time = curr_time
 
-    # def order_balls_nearest(self, centers, start_point):
-    #     centers = centers.copy()
-    #     ordered = []
+            # Draw FPS
+            cv2.putText(
+                frame,
+                f"FPS: {int(fps)}",
+                (20, 40),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1,
+                (0, 255, 0),
+                2,
+            )
 
-    #     # Find the ball closest to start_point
-    #     dists = [np.linalg.norm(c - start_point) for c in centers]
-    #     idx = np.argmin(dists)
-    #     current = centers.pop(idx)
-    #     ordered.append(current)
+            hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+            if self.aspect_ratio == 1.6:
+                # cut top
+                hsv[:72, :] = (0, 0, 0)
+                hsv[:80, :112] = (0, 0, 0)
+                hsv[:80, -112:] = (0, 0, 0)
 
-    #     while centers:
-    #         # Find the ball closest to the last in ordered
-    #         dists = [np.linalg.norm(c - ordered[-1]) for c in centers]
-    #         idx = np.argmin(dists)
-    #         current = centers.pop(idx)
-    #         ordered.append(current)
+                # edges (left, right, bottom)
+                hsv[:, :10] = (0, 0, 0)
+                hsv[:, -10:] = (0, 0, 0)
+                hsv[-10:, :] = (0, 0, 0)
+            else:
+                # cut top
+                hsv[:50, :] = (0, 0, 0)
+                hsv[:60, :100] = (0, 0, 0)
+                hsv[:60, 100:] = (0, 0, 0)
 
-    #     return ordered
+                # edges (left, right, bottom)
+                hsv[:, :10] = (0, 0, 0)
+                hsv[:, -10:] = (0, 0, 0)
+                hsv[-10:, :] = (0, 0, 0)
 
+            if not self.start and keyboard.is_pressed("s"):
+                self.start = True
 
-# def DetectFrogSift(self, frame):
-#     # 1. Setup
-#     template_gray = cv2.cvtColor(self.frog_template, cv2.COLOR_BGR2GRAY)
-#     frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            if self.start:
+                finishPos = self.GetFinishPos(hsv)
+                frogPos = self.GetFrogPos(hsv)
 
-#     # 2. Detect and Compute
-#     sift = cv2.SIFT_create()
-#     kp1, des1 = sift.detectAndCompute(template_gray, None)
-#     kp2, des2 = sift.detectAndCompute(frame_gray, None)
+                if finishPos is not None:
+                    for pos in finishPos:
+                        (cx, cy), radius = pos
+                        cv2.circle(
+                            frame,
+                            (int(cx), int(cy)),
+                            int(radius),
+                            (255, 255, 255),
+                            2,
+                        )  # Center dot
 
-#     # 3. Match using BFMatcher
-#     bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=False)
-#     matches = bf.knnMatch(des1, des2, k=2)
+                if frogPos is not None:
+                    (cx, cy), radius = frogPos
+                    cv2.circle(
+                        frame,
+                        (int(cx), int(cy)),
+                        int(radius),
+                        (255, 255, 255),
+                        2,
+                    )  # Center dot
+                self.process_colors(hsv)
 
-#     # 4. Filter good matches
-#     # Lowe’s ratio test
-#     good = []
-#     for m, n in matches:
-#         if m.distance < 0.75 * n.distance:
-#             good.append(m)
+                if self.frame_id % 3 == 0:
+                    self.frame_id %= 3
 
-#     # 5. Draw Matches
-#     res = cv2.drawMatches(
-#         template_gray,
-#         kp1,
-#         frame_gray,
-#         kp2,
-#         good,
-#         None,
-#         flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,
-#     )
+                    detections = self.GetAllBalls(frame)
+                    self.process_blobs()
 
-#     cv2.imshow("Final Detection", res)
+                    all_chains = self.order_balls_by_finishes(detections)
+                    self.all_chains = all_chains
 
-# # need payment and rebuilding open cv
-# def DetectFrogSurf(self, frame):
-#     # 1. Setup
-#     template = cv2.imread("frog_template.png")
-#     template_gray = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
-#     frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    for idx, chain in enumerate(all_chains):
+                        for order, center in enumerate(chain):
+                            cv2.putText(
+                                frame,
+                                f"C{idx}:{order}",
+                                (int(center[0]) + 6, int(center[1]) - 6),
+                                cv2.FONT_HERSHEY_SIMPLEX,
+                                0.25,
+                                (0, 255, 255),
+                                2,
+                            )
 
-#     # 2. Detect and Compute using SURF
-#     # 400 is the Hessian Threshold (higher = fewer, but stronger features)
-#     surf = cv2.xfeatures2d.SURF_create(400)
+                    for key, val in self.blobs.items():
+                        if key == "red":
+                            color = (0, 0, 255)
+                        elif key == "green":
+                            color = (0, 255, 0)
+                        elif key == "blue":
+                            color = (255, 0, 0)
+                        elif key == "yellow":
+                            color = (0, 255, 255)
+                        else:
+                            color = (255, 255, 255)
 
-#     kp1, des1 = surf.detectAndCompute(template_gray, None)
-#     kp2, des2 = surf.detectAndCompute(frame_gray, None)
+                        for center, count, _ in val:
+                            cv2.putText(
+                                frame,
+                                f"{count}",
+                                (int(center[0]) + 12, int(center[1]) - 12),
+                                cv2.FONT_HERSHEY_SIMPLEX,
+                                0.5,
+                                color,
+                                2,
+                            )
 
-#     # 3. Match using BFMatcher
-#     # SURF descriptors are floating point, so use NORM_L2
-#     bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True)
-#     matches = bf.match(des1, des2)
+                    self.GetCurrentPlayBall()
 
-#     # 4. Sort and Filter
-#     matches = sorted(matches, key=lambda x: x.distance)
-#     good = [m for m in matches if m.distance < 0.1]  # SURF distances vary from SIFT
+                    self.choose_ball_play(detections)
+                    self.reset_shooting()
 
-#     # 5. Draw
-#     res = cv2.drawMatches(
-#         template_gray,
-#         kp1,
-#         frame_gray,
-#         kp2,
-#         good,
-#         None,
-#         flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,
-#     )
+                # print(f"current_ball: {self.current_ball}")
+                # print(f"second_ball: {self.second_color}")
 
-#     cv2.imshow("SURF Detection", res)
+                # cv2.imshow("Red", self.masks_cleaned["red"])
+                # cv2.imshow("Green", self.masks_cleaned["green"])
+                # cv2.imshow("Blue", self.masks_cleaned["blue"])
+                # cv2.imshow("Yellow", self.masks_cleaned["yellow"])
 
-# def DetectFrogOrb(self, frame):
-#     # 1. Setup
-#     template_gray = cv2.cvtColor(self.frog_template, cv2.COLOR_BGR2GRAY)
-#     frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            # Show Frame
+            cv2.imshow("Test", frame)
+            cv2.imshow("Screen Capture", hsv)
 
-#     # 2. Initialize ORB detector
-#     orb = cv2.ORB_create()
+            # self.DetectFrogSift(frame)
+            # self.DetectFrogSurf(frame)
+            # self.DetectFrogOrb(frame)
 
-#     # 3. Detect and Compute
-#     kp1, des1 = orb.detectAndCompute(template_gray, None)
-#     kp2, des2 = orb.detectAndCompute(frame_gray, None)
+            if keyboard.is_pressed("r"):
+                self.start_pos = None
+                self.finish_pos = []
+                self.frog_pos = None
 
-#     # Check if descriptors were found to avoid crashing the matcher
-#     if des1 is None or des2 is None:
-#         return
+            if keyboard.is_pressed("e"):
+                sys.exit(0)
 
-#     # 4. Match using BFMatcher
-#     # IMPORTANT: Use NORM_HAMMING for ORB
-#     bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
-#     matches = bf.knnMatch(des1, des2, k=2)
+            cv2.setMouseCallback("Screen Capture", on_mouse)
 
-#     # 5. Filter good matches
-#     good = []
-#     for m, n in matches:
-#         if m.distance < 0.5 * n.distance:
-#             good.append(m)
+            # Exit on 'q'
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                break
 
-#     # 6. Draw
-#     res = cv2.drawMatches(
-#         template_gray,
-#         kp1,
-#         frame_gray,
-#         kp2,
-#         good,
-#         None,
-#         flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,
-#     )
-
-#     cv2.imshow("ORB Detection", res)
-
-#     # 7. Localize the Frog (Homography)
-#     # We need at least 4 matches to find a homography matrix
-#     if len(good) > 4:
-#         # Extract location of good matches
-#         src_pts = np.float32([kp1[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
-#         dst_pts = np.float32([kp2[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
-
-#         # Find the transformation matrix
-#         M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
-
-#         if M is not None:
-#             # Get dimensions of the template
-#             h, w = template_gray.shape
-#             # Define the corners of the template
-#             pts = np.float32(
-#                 [[0, 0], [0, h - 1], [w - 1, h - 1], [w - 1, 0]]
-#             ).reshape(-1, 1, 2)
-
-#             # Project corners into the frame to find the "contour"
-#             dst = cv2.perspectiveTransform(pts, M)
-
-#             # 8. Calculate Minimum Enclosing Circle
-#             # dst contains the 4 corners of the detected object in the frame
-#             (x, y), radius = cv2.minEnclosingCircle(dst)
-#             center = (int(x), int(y))
-#             radius = int(radius)
-
-#             # 9. Draw Results
-#             # Draw the contour (the bounding box)
-#             frame = cv2.polylines(
-#                 frame, [np.int32(dst)], True, (0, 255, 0), 3, cv2.LINE_AA
-#             )
-#             # Draw the circle
-#             cv2.circle(frame, center, radius, (255, 0, 255), 2)
-
-#             # print(f"Frog found at {center} with radius {radius}")
-
-#     cv2.imshow("Detection with Circle", frame)
+        cv2.destroyAllWindows()
